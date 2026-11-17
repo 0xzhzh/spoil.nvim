@@ -50,6 +50,14 @@ function M.evaluate_callback(request, expected_state)
   end
 
   local params = parse_query(target)
+  if params.error and params.error ~= "" then
+    local detail = params.error
+    if params.error_description and params.error_description ~= "" then
+      detail = detail .. ": " .. params.error_description
+    end
+    return { error = "Spotify authorization failed: " .. detail }
+  end
+
   if not params.code or params.code == "" then
     if request:find("\r\n\r\n") then
       return { error = "no authorization code in callback" }

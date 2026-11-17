@@ -13,6 +13,8 @@ T["evaluates callback requests"] = function()
       wrong_state = o.evaluate_callback(req("code=abc&state=WRONG"), "STATE"),
       wrong_path = o.evaluate_callback(req("code=abc&state=STATE", "/evil"), "STATE"),
       no_code = o.evaluate_callback(req("state=STATE"), "STATE"),
+      denied = o.evaluate_callback(req("error=access_denied&error_description=User%20denied"), "STATE"),
+      denied_plain = o.evaluate_callback(req("error=access_denied"), "STATE"),
       incomplete = o.evaluate_callback("GET /call", "STATE"),
       malformed = o.evaluate_callback("hello\r\n\r\n", "STATE"),
     }
@@ -23,6 +25,8 @@ T["evaluates callback requests"] = function()
   eq(r.wrong_state.error, "OAuth state mismatch (possible CSRF); authorization rejected")
   eq(r.wrong_path.error, "unexpected callback path: /evil")
   eq(r.no_code.error, "no authorization code in callback")
+  eq(r.denied.error, "Spotify authorization failed: access_denied: User denied")
+  eq(r.denied_plain.error, "Spotify authorization failed: access_denied")
   eq(r.incomplete, nil)
   eq(r.malformed.error, "malformed callback request")
 end

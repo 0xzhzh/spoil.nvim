@@ -12,12 +12,12 @@ local encode_form = http.encode_form
 
 local function show_floating_window(url, on_cancel)
   local buf = vim.api.nvim_create_buf(false, true)
-  local width = math.min(100, vim.o.columns - 4)
-  local height = 10
-  local row = math.floor((vim.o.lines - height) / 2)
-  local col = math.floor((vim.o.columns - width) / 2)
+  local width = math.max(1, math.min(100, vim.o.columns - 4))
+  local height = math.max(1, math.min(10, vim.o.lines - 2))
+  local row = math.max(0, math.floor((vim.o.lines - height) / 2))
+  local col = math.max(0, math.floor((vim.o.columns - width) / 2))
 
-  local win = vim.api.nvim_open_win(buf, true, {
+  local ok, win = pcall(vim.api.nvim_open_win, buf, true, {
     relative = "editor",
     width = width,
     height = height,
@@ -28,6 +28,10 @@ local function show_floating_window(url, on_cancel)
     title = " Spotify Authorization ",
     title_pos = "center",
   })
+  if not ok then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    return nil, nil, tostring(win)
+  end
 
   vim.wo[win].winhl = "Normal:NormalFloat"
 
@@ -43,7 +47,7 @@ local function show_floating_window(url, on_cancel)
 
   vim.keymap.set("n", "q", on_cancel or function() end, { buffer = buf, nowait = true, silent = true })
 
-  return win, buf
+  return win, buf, nil
 end
 
 local function exchange_code(code, verifier, redirect_uri, client_id)
@@ -73,10 +77,11 @@ local function exchange_code(code, verifier, redirect_uri, client_id)
 end
 
 local function copy_to_clipboard(text)
-  if vim.fn.has("clipboard") == 1 then
+  if vim.fn.has("clipboard") ~= 1 then return false end
+  return pcall(function()
     vim.fn.setreg("+", text)
     vim.fn.setreg('"', text)
-  end
+  end)
 end
 
 local function do_auth(client_id, open_browser, clipboard)
@@ -106,9 +111,7 @@ local function do_auth(client_id, open_browser, clipboard)
   }
   local url = oauth.authorize_url(params)
 
-  if clipboard then
-    copy_to_clipboard(url)
-  end
+  local copied = clipboard and copy_to_clipboard(url)
 
   -- Track state for cleanup
   local server
@@ -158,7 +161,16 @@ local function do_auth(client_id, open_browser, clipboard)
   end
 
   -- Show floating window (always — status indicator + cancel)
-  win, buf = show_floating_window(url, cancel)
+  local open_err
+  win, buf, open_err = show_floating_window(url, cancel)
+  if open_err then
+    cleanup()
+    return E.notify(E.new("Could not open the authorization window: " .. open_err))
+  end
+
+  if clipboard and not copied then
+    notify.warn("Spoil: Could not copy the authorization URL to the clipboard")
+  end
 
   -- Open browser if configured
   if open_browser then
