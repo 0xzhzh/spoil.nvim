@@ -73,4 +73,44 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
   eq(r.queued, { uri = "spotify:track:1" })
 end
 
+T["background re-render leaves other windows' cursors alone"] = function()
+  local r = child.lua_get([==[(function()
+    local api = require("spoil.api")
+    local pending
+    api.my_playlists = function(_, cb) pending = cb end
+
+    local explorer = require("spoil.explorer")
+    explorer.open_playlists()
+
+    -- User switches to another split while the fetch is in flight
+    vim.cmd("vsplit")
+    local file_buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_lines(file_buf, 0, -1, false, { "a", "b", "c", "d", "e" })
+    vim.api.nvim_set_current_buf(file_buf)
+    vim.api.nvim_win_set_cursor(0, { 4, 0 })
+    local file_win = vim.api.nvim_get_current_win()
+
+    -- Background fetch resolves while the file buffer is current
+    pending(nil, {
+      items = {
+        { id = "p1", name = "One", uri = "spotify:playlist:p1", items = { total = 1 } },
+        { id = "p2", name = "Two", uri = "spotify:playlist:p2", items = { total = 2 } },
+      },
+      total = 2,
+    })
+
+    local playlists_buf = vim.fn.bufnr("spoil://playlists")
+    local spoil_wins = vim.fn.win_findbuf(playlists_buf)
+    return {
+      file_line = vim.api.nvim_win_get_cursor(file_win)[1],
+      spoil_line = spoil_wins[1] and vim.api.nvim_win_get_cursor(spoil_wins[1])[1] or -1,
+      spoil_lines = vim.api.nvim_buf_line_count(playlists_buf),
+    }
+  end)()]==])
+
+  eq(r.file_line, 4)
+  eq(r.spoil_line, 1)
+  eq(r.spoil_lines, 2)
+end
+
 return T

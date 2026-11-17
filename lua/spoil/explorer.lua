@@ -47,9 +47,12 @@ local function render(buf, view)
 
   vim.bo[buf].filetype = vd.filetype
 
-  local cursor = math.min(math.max(view.cursor, 1), #lines)
   if #lines > 0 then
-    vim.api.nvim_win_set_cursor(0, { cursor, 0 })
+    -- Only in windows showing this buffer; window 0 may be an unrelated buffer.
+    local line = math.min(math.max(view.cursor, 1), #lines)
+    for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+      vim.api.nvim_win_set_cursor(win, { line, 0 })
+    end
   end
 end
 
