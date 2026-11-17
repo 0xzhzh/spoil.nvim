@@ -71,13 +71,13 @@ local function exchange_code(code, verifier, redirect_uri, client_id)
   if resp.status ~= 200 then
     local description
     pcall(function()
-      local body = vim.fn.json_decode(resp.body)
+      local body = vim.json.decode(resp.body)
       description = body.error_description
     end)
     error(E.token_exchange_failed(resp.status, description).msg)
   end
 
-  return vim.fn.json_decode(resp.body)
+  return vim.json.decode(resp.body)
 end
 
 local function copy_to_clipboard(text)

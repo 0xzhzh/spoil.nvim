@@ -21,7 +21,7 @@ T["runs the auth flow end to end"] = function()
     http.set_transport(function(method, url, opts)
       assert(method == "POST" and url == "https://accounts.spotify.com/api/token")
       token_body = opts.body
-      return { status = 200, body = vim.fn.json_encode({ access_token = "access", refresh_token = "refresh" }) }
+      return { status = 200, body = vim.json.encode({ access_token = "access", refresh_token = "refresh" }) }
     end)
 
     local ok, err = pcall(auth.auth)
@@ -77,7 +77,7 @@ T["warns when the clipboard is unavailable"] = function()
     notify.backend = function(msg, level) messages[#messages + 1] = { msg = msg, level = level } end
     state.save_tokens = function(tokens) saved = tokens return true end
     http.set_transport(function()
-      return { status = 200, body = vim.fn.json_encode({ access_token = "access", refresh_token = "refresh" }) }
+      return { status = 200, body = vim.json.encode({ access_token = "access", refresh_token = "refresh" }) }
     end)
 
     local real_has = vim.fn.has

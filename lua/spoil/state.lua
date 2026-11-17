@@ -48,7 +48,7 @@ local function write_private(path, contents)
 end
 
 local function write_json(path, value)
-  return write_private(path, vim.fn.json_encode(value) .. "\n")
+  return write_private(path, vim.json.encode(value) .. "\n")
 end
 
 function M.load_credentials()
@@ -57,7 +57,7 @@ function M.load_credentials()
   if not ok or not data or #data == 0 then
     return nil
   end
-  local ok2, decoded = pcall(vim.fn.json_decode, table.concat(data, "\n"))
+  local ok2, decoded = pcall(vim.json.decode, table.concat(data, "\n"))
   if not ok2 then
     return nil
   end
@@ -76,7 +76,7 @@ function M.load_tokens()
   if not ok or not data or #data == 0 then
     return nil
   end
-  local ok2, decoded = pcall(vim.fn.json_decode, table.concat(data, "\n"))
+  local ok2, decoded = pcall(vim.json.decode, table.concat(data, "\n"))
   if not ok2 then
     return nil
   end

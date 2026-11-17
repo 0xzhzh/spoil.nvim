@@ -5,6 +5,11 @@ local http = require("spoil.http")
 local E = require("spoil.error")
 
 local encode_form = http.encode_form
+local JSON_DECODE_OPTS = { luanil = { object = true, array = true } }
+
+local function decode_json(body)
+  return vim.json.decode(body, JSON_DECODE_OPTS)
+end
 
 local function resolve_client_id()
   local id = config.options.auth.client_id
@@ -20,7 +25,7 @@ end
 ---@return spoil.Error
 local function classify_refresh_failure(resp)
   if resp.status == 400 then
-    local ok, body = pcall(vim.fn.json_decode, resp.body or "")
+    local ok, body = pcall(decode_json, resp.body or "")
     if ok and type(body) == "table" and body.error == "invalid_grant" then
       return E.grant_rejected(body.error_description)
     end
@@ -64,7 +69,7 @@ local function refresh_access_token()
     return nil, classify_refresh_failure(resp)
   end
 
-  local ok, new_tokens = pcall(vim.fn.json_decode, resp.body)
+  local ok, new_tokens = pcall(decode_json, resp.body)
   if not ok then
     return nil, E.parse_failed(resp)
   end
@@ -76,7 +81,7 @@ local function refresh_access_token()
 end
 
 local function parse(resp)
-  local ok, data = pcall(vim.fn.json_decode, resp.body)
+  local ok, data = pcall(decode_json, resp.body)
   if not ok then
     return E.parse_failed(resp)
   end
@@ -98,7 +103,7 @@ local function build_opts(token, data, http_opts)
   local opts = { headers = { Authorization = "Bearer " .. token } }
   if data then
     opts.headers["Content-Type"] = "application/json"
-    opts.body = vim.fn.json_encode(data)
+    opts.body = vim.json.encode(data)
   end
   if http_opts then
     opts = vim.tbl_extend("force", opts, http_opts)
@@ -150,7 +155,7 @@ local function refresh_token_async(refresh_token, cb)
       if resp.status ~= 200 then
         return cb(classify_refresh_failure(resp))
       end
-      local ok, tokens = pcall(vim.fn.json_decode, resp.body)
+      local ok, tokens = pcall(decode_json, resp.body)
       if not ok then
         return cb(E.parse_failed(resp))
       end
@@ -308,7 +313,7 @@ function M.paginate(url, callback)
     for _, item in ipairs(data.items or {}) do
       table.insert(all_items, item)
     end
-    total = data.total ~= vim.NIL and data.total or nil
+    total = data.total
   end
 
   if cb then
@@ -320,7 +325,7 @@ function M.paginate(url, callback)
         local data = parse(resp)
         if data.msg then return cb(data, nil) end
         collect(data)
-        url = data.next ~= vim.NIL and data.next or nil
+        url = data.next
         if url then
           fetch()
         else
@@ -337,7 +342,7 @@ function M.paginate(url, callback)
       local data = parse(resp)
       if data.msg then return data end
       collect(data)
-      url = data.next ~= vim.NIL and data.next or nil
+      url = data.next
     end
     return { items = all_items, total = total }
   end

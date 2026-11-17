@@ -45,7 +45,7 @@ T["refreshes tokens on 401"] = function()
     http.set_transport(function(method, url, opts)
       table.insert(calls, { method = method, url = url, auth = opts.headers and opts.headers.Authorization })
       if url:find("/api/token", 1, true) then
-        return { status = 200, body = vim.fn.json_encode({ access_token = "new", refresh_token = "refresh2" }) }
+        return { status = 200, body = vim.json.encode({ access_token = "new", refresh_token = "refresh2" }) }
       end
       if #calls == 1 then return { status = 401, body = "" } end
       return { status = 200, body = '{"ok":true}' }
@@ -75,14 +75,14 @@ T["paginates and handles empty responses"] = function()
       if url:find("page=1", 1, true) then
         return {
           status = 200,
-          body = vim.fn.json_encode({
+          body = vim.json.encode({
             items = { { id = 1 } },
             next = "https://api.spotify.com/next?page=2",
             total = 2,
           }),
         }
       end
-      return { status = 200, body = vim.fn.json_encode({ items = { { id = 2 } }, total = 2 }) }
+      return { status = 200, body = vim.json.encode({ items = { { id = 2 } }, total = 2 }) }
     end)
 
     local data = require("spoil.api_helpers").paginate("https://api.spotify.com/start?page=1")
@@ -216,7 +216,7 @@ T["surfaces token save failures"] = function()
 
     http.set_transport(function(_, url)
       if url:find("/api/token", 1, true) then
-        return { status = 200, body = vim.fn.json_encode({ access_token = "new" }) }
+        return { status = 200, body = vim.json.encode({ access_token = "new" }) }
       end
       return { status = 401, body = "" }
     end)
@@ -224,7 +224,7 @@ T["surfaces token save failures"] = function()
 
     http.set_transport(function(_, url, opts)
       if url:find("/api/token", 1, true) then
-        opts.callback({ status = 200, body = vim.fn.json_encode({ access_token = "new" }) })
+        opts.callback({ status = 200, body = vim.json.encode({ access_token = "new" }) })
       else
         opts.callback({ status = 401, body = "" })
       end
@@ -238,6 +238,110 @@ T["surfaces token save failures"] = function()
 
   eq(r.sync.msg, "Failed to save refreshed Spotify tokens: disk full")
   eq(r.async.msg, "Failed to save refreshed Spotify tokens: disk full")
+end
+
+T["uses vim.system without temp files"] = function()
+  local r = child.lua_get([[(function()
+    local real_system = vim.system
+    local seen = {}
+    vim.system = function(cmd, opts, cb)
+      table.insert(seen, { cmd = cmd, opts = opts })
+      local result = { code = 0, signal = 0, stdout = "BODY\n__SPOIL_STATUS__201", stderr = "" }
+      if cb then
+        cb(result)
+        return {}
+      end
+      return { wait = function() return result end }
+    end
+
+    local http = require("spoil.http")
+    local sync = http.get("https://example.test/x", {
+      headers = { X = "Y" },
+      body = "data",
+      timeout = 4,
+      connect_timeout = 2,
+    })
+    local async
+    http.post("https://example.test/y", {
+      callback = function(resp) async = resp end,
+    })
+    vim.wait(100, function() return async ~= nil end)
+
+    local sync_seen, async_seen = seen[1], seen[2]
+    vim.system = real_system
+    return {
+      sync = sync,
+      async = async,
+      sync_cmd = sync_seen.cmd,
+      async_cmd = async_seen.cmd,
+      sync_opts = sync_seen.opts,
+      async_opts = async_seen.opts,
+    }
+  end)()]])
+
+  eq(r.sync, { status = 201, body = "BODY", exit_code = 0 })
+  eq(r.async, { status = 201, body = "BODY", exit_code = 0 })
+  eq(r.sync_opts, { text = true, timeout = 4000 })
+  eq(r.async_opts, { text = true, timeout = 10000 })
+
+  for _, cmd in ipairs({ r.sync_cmd, r.async_cmd }) do
+    eq(vim.tbl_contains(cmd, "-o"), false)
+    eq(vim.tbl_contains(cmd, "--max-time"), false)
+    eq(vim.tbl_contains(cmd, "--connect-timeout"), true)
+    eq(vim.tbl_contains(cmd, "-w"), true)
+    local has_marker = false
+    for _, arg in ipairs(cmd) do
+      if arg:find("__SPOIL_STATUS__", 1, true) then has_marker = true end
+    end
+    eq(has_marker, true)
+  end
+
+  eq(vim.tbl_contains(r.sync_cmd, "-H"), true)
+  eq(vim.tbl_contains(r.sync_cmd, "X: Y"), true)
+  eq(vim.tbl_contains(r.sync_cmd, "-d"), true)
+  eq(vim.tbl_contains(r.sync_cmd, "data"), true)
+  eq(vim.tbl_contains(r.sync_cmd, "2"), true)
+end
+
+T["decodes JSON nulls without vim.NIL"] = function()
+  local r = child.lua_get([[(function()
+    local state = require("spoil.state")
+    local http = require("spoil.http")
+    state.load_tokens = function() return { access_token = "t" } end
+
+    http.set_transport(function()
+      return { status = 200, body = '{"items":[],"next":null,"total":null,"owner":null}' }
+    end)
+    local data = require("spoil.api_helpers").get("https://api.spotify.com/v1/me")
+    return { has_next = rawget(data, "next") ~= nil, has_total = rawget(data, "total") ~= nil }
+  end)()]])
+
+  eq(r.has_next, false)
+  eq(r.has_total, false)
+end
+
+T["reports vim.system spawn failures"] = function()
+  local r = child.lua_get([[(function()
+    local real_system = vim.system
+    vim.system = function()
+      error("curl missing")
+    end
+
+    local http = require("spoil.http")
+    local sync = http.get("https://example.test/x")
+    local async
+    http.get("https://example.test/y", { callback = function(resp) async = resp end })
+    vim.wait(100, function() return async ~= nil end)
+    vim.system = real_system
+
+    return { sync = sync, async = async }
+  end)()]])
+
+  eq(r.sync.exit_code, 127)
+  eq(r.sync.status, 0)
+  eq(r.sync.body:find("curl missing", 1, true) ~= nil, true)
+  eq(r.async.exit_code, 127)
+  eq(r.async.status, 0)
 end
 
 return T

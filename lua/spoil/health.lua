@@ -35,9 +35,9 @@ local function check_curl()
     return
   end
 
-  local output = trim(vim.fn.system({ "curl", "--version" }))
-  local version = output:match("^([^\n]+)")
-  if vim.v.shell_error == 0 and version and version ~= "" then
+  local ok, result = pcall(function() return vim.system({ "curl", "--version" }, { text = true }):wait() end)
+  local version = ok and trim(result.stdout or ""):match("^([^\n]+)") or nil
+  if ok and result.code == 0 and version and version ~= "" then
     vim.health.ok("curl found: " .. version)
   else
     vim.health.warn("curl is present but `curl --version` failed", {

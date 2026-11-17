@@ -4,6 +4,7 @@ local M = {}
 -- the sync path forever. Per-request: `opts.timeout` / `opts.connect_timeout`.
 local DEFAULT_CONNECT_TIMEOUT = 5
 local DEFAULT_TIMEOUT = 10
+local STATUS_MARKER = "__SPOIL_STATUS__"
 
 ---@alias spoil.HttpResponse { status: integer, body: string, exit_code?: integer }
 ---@class spoil.HttpOpts
@@ -24,20 +25,13 @@ end
 
 local function build_curl(method, url, opts)
   opts = opts or {}
-  local tmp = vim.fn.tempname()
   local cmd = {
     "curl",
     "-s",
     "--connect-timeout",
     tostring(opts.connect_timeout or DEFAULT_CONNECT_TIMEOUT),
-    "--max-time",
-    tostring(opts.timeout or DEFAULT_TIMEOUT),
     "-X",
     method,
-    "-o",
-    tmp,
-    "-w",
-    "%{http_code}",
   }
 
   for k, v in pairs(opts.headers or {}) do
@@ -50,49 +44,50 @@ local function build_curl(method, url, opts)
     table.insert(cmd, opts.body)
   end
 
+  table.insert(cmd, "-w")
+  table.insert(cmd, "\n" .. STATUS_MARKER .. "%{http_code}")
   table.insert(cmd, url)
 
-  return cmd, tmp
+  return cmd
 end
 
-local function read_tmp(tmp)
-  if vim.fn.filereadable(tmp) ~= 1 then
-    return ""
+local function from_process(result)
+  local stdout = result.stdout or ""
+  local body, status = stdout:match("^(.*)\n" .. STATUS_MARKER .. "(%d%d%d)$")
+  if not body then
+    body, status = stdout, "0"
   end
-  local body = table.concat(vim.fn.readfile(tmp), "\n")
-  os.remove(tmp)
-  return body
+
+  local exit_code = result.code or 0
+  if exit_code == 0 and (result.signal or 0) ~= 0 then
+    exit_code = 128 + result.signal
+  end
+
+  return { status = tonumber(status) or 0, body = body, exit_code = exit_code }
+end
+
+local function spawn_error(err)
+  return { status = 0, body = tostring(err), exit_code = 127 }
 end
 
 --- Default transport: shell out to curl.
 ---@type spoil.HttpTransport
 local function curl_transport(method, url, opts)
   opts = opts or {}
-  local cmd, tmp = build_curl(method, url, opts)
+  local cmd = build_curl(method, url, opts)
+  local sys_opts = { text = true, timeout = (opts.timeout or DEFAULT_TIMEOUT) * 1000 }
 
   if opts.callback then
-    local status = 0
-    vim.fn.jobstart(cmd, {
-      stdout_buffered = true,
-      on_stdout = function(_, lines)
-        status = tonumber(lines[1]) or 0
-      end,
-      -- on_exit runs even when curl prints nothing, so the callback always fires.
-      on_exit = function(_, code)
-        vim.schedule(
-          function()
-            opts.callback({ status = status, body = read_tmp(tmp), exit_code = code })
-          end
-        )
-      end,
-    })
+    local ok, err = pcall(vim.system, cmd, sys_opts, function(result)
+      vim.schedule(function() opts.callback(from_process(result)) end)
+    end)
+    if not ok then
+      vim.schedule(function() opts.callback(spawn_error(err)) end)
+    end
   else
-    local status_line = vim.fn.system(cmd)
-    return {
-      status = tonumber(status_line) or 0,
-      body = read_tmp(tmp),
-      exit_code = vim.v.shell_error,
-    }
+    local ok, result = pcall(function() return vim.system(cmd, sys_opts):wait() end)
+    if not ok then return spawn_error(result) end
+    return from_process(result)
   end
 end
 
