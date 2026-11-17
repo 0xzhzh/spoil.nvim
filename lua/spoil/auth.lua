@@ -64,6 +64,10 @@ local function exchange_code(code, verifier, redirect_uri, client_id)
     }),
   })
 
+  if resp.exit_code and resp.exit_code ~= 0 then
+    error(E.transport_failed(resp.exit_code).msg)
+  end
+
   if resp.status ~= 200 then
     local description
     pcall(function()

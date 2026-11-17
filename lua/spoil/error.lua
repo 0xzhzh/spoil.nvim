@@ -25,6 +25,7 @@ M.messages = {
   unknown_view = "Unknown view: %s",
   unknown_command = "Unknown command '%s'",
   token_exchange_failed = "Token exchange failed (HTTP %s)",
+  transport_failed = "curl failed (exit %s)",
 }
 
 ---@class spoil.Error
@@ -94,6 +95,12 @@ function M.from_api(status, parsed)
     status = status,
     reason = reason,
   })
+end
+
+---@param exit_code integer
+---@return spoil.Error
+function M.transport_failed(exit_code)
+  return M.new(string.format(M.messages.transport_failed, tostring(exit_code)), { status = 0 })
 end
 
 ---@param status integer

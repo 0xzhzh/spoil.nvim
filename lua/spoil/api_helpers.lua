@@ -28,6 +28,14 @@ local function classify_refresh_failure(resp)
   return E.token_refresh_failed(resp.status)
 end
 
+---@param resp spoil.HttpResponse
+---@return spoil.Error|nil
+local function transport_error(resp)
+  if resp.exit_code and resp.exit_code ~= 0 then
+    return E.transport_failed(resp.exit_code)
+  end
+end
+
 local function refresh_access_token()
   local tokens = state.load_tokens()
   if not tokens or not tokens.refresh_token then
@@ -48,6 +56,9 @@ local function refresh_access_token()
       client_id = client_id,
     }),
   })
+
+  local terr = transport_error(resp)
+  if terr then return nil, terr end
 
   if resp.status ~= 200 then
     return nil, classify_refresh_failure(resp)
@@ -98,6 +109,8 @@ local function request(method, tokens, url, data, http_opts)
   local f = http[method]
   local opts = build_opts(tokens.access_token, data, http_opts)
   local resp = f(url, opts)
+  local terr = transport_error(resp)
+  if terr then return terr end
 
   if resp.status == 401 then
     local new_token, rerr = refresh_access_token()
@@ -109,6 +122,8 @@ local function request(method, tokens, url, data, http_opts)
       return rerr or E.token_refresh_failed()
     end
     resp = f(url, build_opts(new_token, data, http_opts))
+    terr = transport_error(resp)
+    if terr then return terr end
   end
 
   if resp.status == 429 then return E.rate_limited() end
@@ -129,6 +144,8 @@ local function refresh_token_async(refresh_token, cb)
       client_id = client_id,
     }),
     callback = function(resp)
+      local terr = transport_error(resp)
+      if terr then return cb(terr) end
       if resp.status ~= 200 then
         return cb(classify_refresh_failure(resp))
       end
@@ -147,6 +164,9 @@ local function request_async(method, session, url, data, cb, http_opts)
 
   local function run(retried)
     opts.callback = function(resp)
+      local terr = transport_error(resp)
+      if terr then return cb(terr, nil) end
+
       if resp.status == 401 and not retried then
         if not session.refresh_token then
           state.clear_tokens()
@@ -181,6 +201,8 @@ local function request_async(method, session, url, data, cb, http_opts)
 end
 
 local function api_error(resp)
+  local terr = transport_error(resp)
+  if terr then return terr end
   return E.from_api(resp.status, parse(resp))
 end
 
@@ -191,6 +213,16 @@ local function check_write(resp)
     return parse(resp)
   end
   return api_error(resp)
+end
+
+local function check_write_async(resp, cb)
+  if resp.status >= 200 and resp.status < 300 then
+    if resp.body == "" then return cb(nil, {}) end
+    local data = parse(resp)
+    if data.msg then return cb(data, nil) end
+    return cb(nil, data)
+  end
+  cb(api_error(resp), nil)
 end
 
 local function check(cb)
@@ -231,13 +263,7 @@ function M.post(url, data, callback)
   if cb then
     request_async("post", tokens, url, data, function(err, resp)
       if err then return cb(err, nil) end
-      if resp.status >= 200 and resp.status < 300 then
-        if resp.body == "" then return cb(nil, {}) end
-        local d = parse(resp)
-        if d.msg then return cb(nil, { body = resp.body }) end
-        return cb(nil, d)
-      end
-      cb(api_error(resp), nil)
+      check_write_async(resp, cb)
     end)
   else
     return check_write(request("post", tokens, url, data))
@@ -250,13 +276,7 @@ function M.put(url, data, callback)
   if cb then
     request_async("put", tokens, url, data, function(err, resp)
       if err then return cb(err, nil) end
-      if resp.status >= 200 and resp.status < 300 then
-        if resp.body == "" then return cb(nil, {}) end
-        local d = parse(resp)
-        if d.msg then return cb(nil, { body = resp.body }) end
-        return cb(nil, d)
-      end
-      cb(api_error(resp), nil)
+      check_write_async(resp, cb)
     end)
   else
     return check_write(request("put", tokens, url, data))
@@ -269,13 +289,7 @@ function M.del(url, data, callback)
   if cb then
     request_async("delete", tokens, url, data, function(err, resp)
       if err then return cb(err, nil) end
-      if resp.status >= 200 and resp.status < 300 then
-        if resp.body == "" then return cb(nil, {}) end
-        local d = parse(resp)
-        if d.msg then return cb(nil, { body = resp.body }) end
-        return cb(nil, d)
-      end
-      cb(api_error(resp), nil)
+      check_write_async(resp, cb)
     end)
   else
     return check_write(request("delete", tokens, url, data))

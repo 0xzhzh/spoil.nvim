@@ -139,4 +139,69 @@ T["reports async auth errors"] = function()
   eq(r.status, 401)
 end
 
+T["reports transport failures"] = function()
+  local r = child.lua_get([[(function()
+    local config = require("spoil.config")
+    local state = require("spoil.state")
+    local http = require("spoil.http")
+    config.options.auth.client_id = "cid"
+    state.load_tokens = function() return { access_token = "t", refresh_token = "r" } end
+    local H = require("spoil.api_helpers")
+
+    http.set_transport(function() return { status = 0, body = "", exit_code = 7 } end)
+    local sync = H.get("https://api.spotify.com/sync")
+
+    http.set_transport(function(_, _, opts) opts.callback({ status = 0, body = "", exit_code = 28 }) end)
+    local async
+    H.get("https://api.spotify.com/async", function(err) async = err end)
+    vim.wait(1000, function() return async ~= nil end)
+
+    local cleared
+    state.clear_tokens = function() cleared = true end
+    http.set_transport(function(_, url, opts)
+      if url:find("/api/token", 1, true) then
+        opts.callback({ status = 0, body = "", exit_code = 28 })
+      else
+        opts.callback({ status = 401, body = "" })
+      end
+    end)
+    local refresh
+    H.get("https://api.spotify.com/refresh", function(err) refresh = err end)
+    vim.wait(1000, function() return refresh ~= nil end)
+
+    return { sync = sync, async = async, refresh = refresh, cleared = cleared }
+  end)()]])
+
+  eq(r.sync.msg, "curl failed (exit 7)")
+  eq(r.sync.status, 0)
+  eq(r.async.msg, "curl failed (exit 28)")
+  eq(r.refresh.msg, "curl failed (exit 28)")
+  eq(r.cleared, nil)
+end
+
+T["returns parse errors from async writes"] = function()
+  local r = child.lua_get([[(function()
+    local state = require("spoil.state")
+    local http = require("spoil.http")
+    state.load_tokens = function() return { access_token = "t" } end
+    local H = require("spoil.api_helpers")
+    local results = {}
+
+    for _, method in ipairs({ "post", "put", "del" }) do
+      http.set_transport(function(_, _, opts) opts.callback({ status = 200, body = "not json" }) end)
+      local result
+      H[method]("https://api.spotify.com/write", {}, function(err, data) result = { err = err, data = data } end)
+      vim.wait(1000, function() return result ~= nil end)
+      results[method] = result
+    end
+
+    return results
+  end)()]])
+
+  for _, method in ipairs({ "post", "put", "del" }) do
+    eq(r[method].err.msg, "Failed to parse the Spotify response")
+    eq(r[method].data, nil)
+  end
+end
+
 return T
