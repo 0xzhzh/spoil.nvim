@@ -40,4 +40,32 @@ T["formats now-playing items"] = function()
   eq(r.custom.empty, "nothing")
 end
 
+T["notify_now_playing handles missing artists and episodes"] = function()
+  local r = child.lua_get([[(function()
+    local api = require("spoil.api")
+    local user = require("spoil.user_api")
+    local notify = require("spoil.notify")
+    local messages = {}
+    notify.backend = function(msg) messages[#messages + 1] = msg end
+
+    local function run(item)
+      api.now_playing = function(_, cb) cb(nil, { item = item }) end
+      user.notify_now_playing()
+      return messages[#messages]
+    end
+
+    return {
+      track = run({ name = "Song", artists = { { name = "Artist" } } }),
+      episode = run({ name = "Episode", show = { name = "Show" } }),
+      empty_artists = run({ name = "Local", artists = {} }),
+      missing_artists = run({ name = "Local" }),
+    }
+  end)()]])
+
+  eq(r.track, "Artist | Song")
+  eq(r.episode, "Show | Episode")
+  eq(r.empty_artists, "Local")
+  eq(r.missing_artists, "Local")
+end
+
 return T

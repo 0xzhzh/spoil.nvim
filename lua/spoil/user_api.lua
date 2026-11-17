@@ -127,6 +127,15 @@ function M.statusline()
   return M.format_status(status_item)
 end
 
+local function now_playing_text(item)
+  item = item or {}
+  local artist = type(item.artists) == "table" and item.artists[1] and item.artists[1].name
+  local show = type(item.show) == "table" and item.show.name
+  local context = artist or show
+  local title = item.name or item.uri or "Unknown"
+  return context and (context .. " | " .. title) or title
+end
+
 function M.notify_now_playing()
   api.now_playing(nil, function(err, data)
     if err or not data then
@@ -138,7 +147,7 @@ function M.notify_now_playing()
       notify.info("Nothing playing", { icon = "⏹" })
       return
     end
-    notify.info(t.artists[1].name .. " | " .. t.name, {
+    notify.info(now_playing_text(t), {
       title = "Now Playing",
       icon = "▶",
     })
