@@ -14,18 +14,21 @@ T["restores window options when the view closes"] = function()
       %s
       vim.wo.cursorline = false
       vim.wo.number = true
-      local original = { cursorline = vim.wo.cursorline, number = vim.wo.number }
+      vim.wo.wrap = true
+      local original = { cursorline = vim.wo.cursorline, number = vim.wo.number, wrap = vim.wo.wrap }
 
       local explorer = require("spoil.explorer")
       explorer.open_playlists()
-      local opened = { cursorline = vim.wo.cursorline, number = vim.wo.number }
+      local opened = { cursorline = vim.wo.cursorline, number = vim.wo.number, wrap = vim.wo.wrap }
 
       explorer.open_playlist("p1")
-      local navigated = { cursorline = vim.wo.cursorline, number = vim.wo.number }
+      local navigated = { cursorline = vim.wo.cursorline, number = vim.wo.number, wrap = vim.wo.wrap }
 
       vim.api.nvim_buf_delete(vim.api.nvim_get_current_buf(), { force = true })
       local restored = vim.wait(1000, function()
-        return vim.wo.cursorline == original.cursorline and vim.wo.number == original.number
+        return vim.wo.cursorline == original.cursorline
+          and vim.wo.number == original.number
+          and vim.wo.wrap == original.wrap
       end)
 
       return {
@@ -33,12 +36,12 @@ T["restores window options when the view closes"] = function()
         opened = opened,
         navigated = navigated,
         restored = restored,
-        final = { cursorline = vim.wo.cursorline, number = vim.wo.number },
+        final = { cursorline = vim.wo.cursorline, number = vim.wo.number, wrap = vim.wo.wrap },
       }
     end)()]]):format(stub_api))
 
-  eq(r.opened, { cursorline = true, number = false })
-  eq(r.navigated, { cursorline = true, number = false })
+  eq(r.opened, { cursorline = true, number = false, wrap = false })
+  eq(r.navigated, { cursorline = true, number = false, wrap = false })
   eq(r.restored, true)
   eq(r.final, r.original)
 end

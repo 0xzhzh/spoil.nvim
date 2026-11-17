@@ -163,6 +163,7 @@ T["opens spoil URIs with :edit"] = function()
               uri = "spotify:track:1",
               artists = { { name = "Artist" } },
               album = { name = "Album" },
+              duration_ms = 222000,
             },
           },
         },
@@ -199,7 +200,7 @@ T["opens spoil URIs with :edit"] = function()
   end)()]])
 
   eq(r.playlists, { name = "spoil://playlist", filetype = "spoil-playlists", lines = { "Mix  1  private  alice" } })
-  eq(r.tracks, { name = "spoil://playlist/p1", filetype = "spoil-tracks", lines = { "Song  Artist  (Album)" } })
+  eq(r.tracks, { name = "spoil://playlist/p1", filetype = "spoil-tracks", lines = { "Song  3:42  Artist  Album" } })
   eq(r.reused, true)
   eq(r.count, 2)
 end

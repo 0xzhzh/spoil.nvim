@@ -250,6 +250,7 @@ local function save_window_opts(win)
   saved_window_opts[win] = {
     cursorline = vim.wo[win].cursorline,
     number = vim.wo[win].number,
+    wrap = vim.wo[win].wrap,
   }
 end
 
@@ -261,12 +262,14 @@ local function restore_window_opts(win)
   if not vim.api.nvim_win_is_valid(win) then return end
   vim.wo[win].cursorline = saved.cursorline
   vim.wo[win].number = saved.number
+  vim.wo[win].wrap = saved.wrap
 end
 
 local function prepare_window(win)
   save_window_opts(win)
   vim.wo[win].cursorline = true
   vim.wo[win].number = false
+  vim.wo[win].wrap = false
 end
 
 local function maybe_restore_window_opts(win)

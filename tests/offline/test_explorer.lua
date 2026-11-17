@@ -35,6 +35,7 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
               uri = "spotify:track:1",
               artists = { { name = "Artist" } },
               album = { name = "Album" },
+              duration_ms = 222000,
             },
           },
         },
@@ -88,7 +89,7 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
 
   eq(r.tracks.name, "spoil://playlist/p1")
   eq(r.tracks.filetype, "spoil-tracks")
-  eq(r.tracks.lines, { "Song  Artist  (Album)" })
+  eq(r.tracks.lines, { "Song  3:42  Artist  Album" })
   eq(r.tracks.selected.uri, "spotify:track:1")
   eq(r.has_a, true)
   eq(r.queued, { uri = "spotify:track:1" })
@@ -110,6 +111,31 @@ T["renders playlist counts and metadata"] = function()
   eq(r.items, "Items  3  public  me")
   eq(r.tracks, "Tracks  4  private  you")
   eq(r.missing, "Missing  ?  ?  ?")
+end
+
+T["renders track metadata and durations"] = function()
+  local r = child.lua_get([[(function()
+    local tracks = require("spoil.explorer.tracks")
+    local function render(item)
+      return tracks.format({ item }).lines[1]
+    end
+    return {
+      normal = render({
+        track = {
+          name = "Song",
+          artists = { { name = "A" }, { name = "B" } },
+          album = { name = "Album" },
+          duration_ms = 222000,
+        },
+      }),
+      missing = render({ track = { name = "Song" } }),
+      unavailable = render({}),
+    }
+  end)()]])
+
+  eq(r.normal, "Song  3:42  A, B  Album")
+  eq(r.missing, "Song  ?  ?  ?")
+  eq(r.unavailable, "(unavailable)")
 end
 
 T["background re-render leaves other windows' cursors alone"] = function()

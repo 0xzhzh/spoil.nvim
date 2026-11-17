@@ -23,6 +23,7 @@ local stub_api = [[
             uri = "spotify:track:" .. opts.playlist_id,
             artists = { { name = "Artist" } },
             album = { name = "Album" },
+            duration_ms = 222000,
           },
         },
       },
@@ -81,7 +82,7 @@ T["playlists push and pop the tracks view"] = function()
   eq(r.pushed.name, "spoil://playlist/p2")
   eq(r.pushed.filetype, "spoil-tracks")
   eq(r.pushed.track.uri, "spotify:track:p2")
-  eq(r.pushed.lines, { "Song p2  Artist  (Album)" })
+  eq(r.pushed.lines, { "Song p2  3:42  Artist  Album" })
   eq(r.popped.same_buf, true)
   eq(r.popped.name, "spoil://playlist")
   eq(r.popped.filetype, "spoil-playlists")
