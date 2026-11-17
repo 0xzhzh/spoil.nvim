@@ -62,7 +62,7 @@ local function check_config()
     vim.health.ok("Spotify client ID configured (from " .. source .. ")")
   else
     vim.health.warn("No Spotify client ID configured", {
-      "Set `auth.client_id` in your spoil.nvim config, or run `:Spoil auth` to be prompted",
+      "Set `auth.client_id` in your spoil.nvim config, or run `:Spoil login` to be prompted",
     })
   end
 
@@ -91,7 +91,7 @@ local function check_auth()
   local tokens = state.load_tokens()
   if not tokens then
     vim.health.warn("Not authenticated", {
-      "Run `:Spoil auth` to sign in",
+      "Run `:Spoil login` to sign in",
     })
     return
   end
@@ -100,7 +100,7 @@ local function check_auth()
     vim.health.ok("Access token present")
   else
     vim.health.error("Tokens file has no access token", {
-      "Run `:Spoil logout` and then `:Spoil auth` to sign in again",
+      "Run `:Spoil logout` and then `:Spoil login` to sign in again",
     })
   end
 

@@ -27,9 +27,12 @@ function M.is_authorized()
   return require("spoil.state").is_authorized()
 end
 
-function M.auth()
+function M.login()
   require("spoil.auth").auth()
 end
+
+--- Backwards-compatible alias for `login()`.
+M.auth = M.login
 
 function M.logout()
   require("spoil.state").clear_all()
@@ -42,7 +45,7 @@ end
 local function require_auth()
   if M.is_authorized() then return true end
   if config.options.auth.auto_auth ~= false then
-    require("spoil.auth").auth()
+    M.login()
   else
     E.notify(E.not_authenticated())
   end

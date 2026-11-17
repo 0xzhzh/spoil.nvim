@@ -39,9 +39,9 @@ local commands = {
     desc = "Go to the previous track",
     run = function() user_api.previous_track() end,
   },
-  auth = {
-    desc = "Authenticate with Spotify",
-    run = function() user_api.auth() end,
+  login = {
+    desc = "Log in to Spotify",
+    run = function() user_api.login() end,
   },
   logout = {
     desc = "Clear credentials and tokens",

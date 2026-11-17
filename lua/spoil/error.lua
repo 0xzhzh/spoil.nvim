@@ -11,7 +11,7 @@ local M = {}
 --- Canonical messages. Prefer the constructors below over hand-written text.
 M.messages = {
   unknown = "Unknown error",
-  not_authenticated = "Not authenticated. Run :lua require('spoil').auth() first",
+  not_authenticated = "Not authenticated. Run :Spoil login first",
   rate_limited = "Rate limited by Spotify; try again shortly",
   parse_failed = "Failed to parse the Spotify response",
   token_refresh_failed = "Failed to refresh the Spotify access token",
