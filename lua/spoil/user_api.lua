@@ -6,6 +6,27 @@ local E = require("spoil.error")
 
 local M = {}
 
+local status_item = nil
+local status_timer = nil
+local status_disabled = false
+local status_checked_at = 0
+local STATUS_RECHECK_MS = 1000
+
+local function stop_status_timer()
+  if status_timer then
+    status_timer:stop()
+    status_timer:close()
+    status_timer = nil
+  end
+end
+
+local function disable_statusline()
+  stop_status_timer()
+  status_disabled = true
+  status_checked_at = vim.uv.now()
+  status_item = nil
+end
+
 --- Known no-op 403 reasons. Unknown reasons are surfaced as a warning because
 --- they can also mean restricted playback (e.g. missing Premium/allowlist).
 local benign_player_reasons = {
@@ -43,6 +64,7 @@ M.auth = M.login
 
 function M.logout()
   require("spoil.state").clear_all()
+  disable_statusline()
   notify.info("Credentials and tokens cleared")
 end
 
@@ -78,9 +100,6 @@ function M.open_playlist(id)
   explorer.open_playlist(id)
 end
 
-local status_item = nil
-local status_timer = nil
-
 --- Format a now-playing item for the statusline.
 ---@param item table|nil
 ---@return string
@@ -104,6 +123,21 @@ end
 
 function M.statusline()
   local sl = config.options.statusline
+
+  if status_disabled then
+    local now = vim.uv.now()
+    if now - status_checked_at >= STATUS_RECHECK_MS then
+      status_checked_at = now
+      if M.is_authorized() then
+        status_disabled = false
+      else
+        return M.format_status(status_item)
+      end
+    else
+      return M.format_status(status_item)
+    end
+  end
+
   if not status_timer then
     status_timer = vim.uv.new_timer()
     assert(status_timer, "uv.new_timer() returned nil?")
@@ -113,12 +147,7 @@ function M.statusline()
       vim.schedule_wrap(function()
         api.now_playing({ timeout = sl.timeout }, function(err, data)
           if err then
-            if err.status == 401 then
-              status_timer:stop()
-              status_timer:close()
-              status_timer = nil
-            end
-            status_item = nil
+            if err.status == 401 then disable_statusline() end
             return
           end
           if not data or not data.item then
