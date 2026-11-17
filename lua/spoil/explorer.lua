@@ -2,6 +2,7 @@ local M = {}
 local E = require("spoil.error")
 local views = {}
 local states = {}
+local buffers = {}
 local cache = {}
 local saved_window_opts = {}
 
@@ -18,8 +19,7 @@ end
 
 local function current_view()
   local s = get_state()
-  if not s or #s.stack == 0 then return nil end
-  return s.stack[#s.stack]
+  return s and s.view
 end
 
 --- Find the Spoil view to read a selection from. Prefer the current buffer; if
@@ -45,6 +45,27 @@ local function window_for_buffer(buf)
 end
 
 local load_view
+local open_view
+
+local function spec_for_uri(uri)
+  local path = uri:match("^spoil://(.+)$")
+  if path == "playlists" then
+    return { name = "playlists", context = {} }
+  end
+  local id = path and path:match("^playlist/([^?]+)")
+  if id and id ~= "" then
+    return { name = "tracks", context = { playlist_id = vim.uri_decode(id) } }
+  end
+end
+
+local function uri_for(name, context)
+  if name == "tracks" then
+    local id = context and context.playlist_id
+    if not id then return nil end
+    return "spoil://playlist/" .. id
+  end
+  return "spoil://" .. name
+end
 
 local function cache_key(name, ctx)
   return name .. ":" .. ((ctx and ctx.playlist_id) or "")
@@ -79,21 +100,8 @@ local function render(buf, view)
   end
 end
 
-local function view_uri(view)
-  if view.name == "tracks" and view.context and view.context.playlist_id then
-    return "spoil://playlist/" .. view.context.playlist_id
-  end
-  return "spoil://" .. view.name
-end
-
-local function set_buffer_uri(buf, view)
-  local uri = view_uri(view)
-  if vim.api.nvim_buf_get_name(buf) == uri then return end
-  pcall(vim.api.nvim_buf_set_name, buf, uri)
-end
-
 local function apply_keymaps(buf, view)
-  local s = get_state()
+  local s = states[buf]
   if not s then return end
 
   if s._keymap_keys then
@@ -107,8 +115,8 @@ local function apply_keymaps(buf, view)
 
   local ctx = {
     push_view = function(name, c)
-      local s2 = get_state()
-      if not s2 then return end
+      local state = states[buf]
+      if not state then return end
       if not views[name] then
         E.notify(E.unknown_view(name))
         return
@@ -128,41 +136,43 @@ local function apply_keymaps(buf, view)
         c = vim.tbl_extend("force", c, { playlist_id = pid })
       end
 
-      local parent = s2.stack[#s2.stack]
-      if parent then parent.cursor = vim.api.nvim_win_get_cursor(0)[1] end
+      local target = uri_for(name, c)
+      if not target or target == state.uri then return end
 
-      local new_view = { name = name, items = {}, cursor = 1, context = c }
-      table.insert(s2.stack, new_view)
-      set_buffer_uri(buf, new_view)
-      load_view(buf, new_view)
+      local win = window_for_buffer(buf) or vim.api.nvim_get_current_win()
+      state.view.cursor = vim.api.nvim_win_get_cursor(win)[1]
+      open_view(target, name, c, state.uri)
     end,
     pop_view = function()
-      local s2 = get_state()
-      if not s2 then return end
-      if #s2.stack <= 1 then
-        local v = s2.stack[1]
-        if v and v.name == "tracks" then return M.open_playlists() end
-        pcall(vim.api.nvim_buf_delete, buf, { force = true })
-        return
+      local state = states[buf]
+      if not state then return end
+      local parent_uri = state.parent_uri
+      if parent_uri then
+        local spec = spec_for_uri(parent_uri)
+        if spec then
+          open_view(parent_uri, spec.name, spec.context)
+          return
+        end
       end
-      table.remove(s2.stack)
-      local prev = s2.stack[#s2.stack]
-      set_buffer_uri(buf, prev)
-      render(buf, prev)
-      apply_keymaps(buf, prev)
+      if state.view and state.view.name == "tracks" then return M.open_playlists() end
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
     end,
     close = function()
       pcall(vim.api.nvim_buf_delete, buf, { force = true })
     end,
     refresh = function()
-      local v = current_view()
-      if v then load_view(buf, v) end
+      local state = states[buf]
+      if state and state.view then load_view(buf, state.view) end
     end,
     selected_item = function()
-      local v = current_view()
+      local state = states[buf]
+      local v = state and state.view
       if not v or not v.items or #v.items == 0 then return nil end
-      local line = vim.api.nvim_win_get_cursor(0)[1]
-      local idx = math.min(math.max(line, 1), #v.items)
+      local win = window_for_buffer(buf)
+      if not win then return nil end
+      local ok, cursor = pcall(vim.api.nvim_win_get_cursor, win)
+      local idx = (ok and cursor and cursor[1]) or v.cursor or 1
+      idx = math.min(math.max(idx, 1), #v.items)
       return v.items[idx]
     end,
   }
@@ -174,7 +184,7 @@ local function apply_keymaps(buf, view)
       vim.keymap.set,
       "n",
       key,
-      function() fn(current_view(), ctx) end,
+      function() fn(states[buf] and states[buf].view, ctx) end,
       { buffer = buf, silent = true, noremap = true }
     )
     table.insert(keys, key)
@@ -206,7 +216,7 @@ load_view = function(buf, view)
     cache[key] = items
     view.items = items
     local s = states[buf]
-    if s and vim.api.nvim_buf_is_valid(buf) and s.stack[#s.stack] == view then
+    if s and vim.api.nvim_buf_is_valid(buf) and s.view == view then
       render(buf, view)
     end
   end)
@@ -228,6 +238,12 @@ local function restore_window_opts(win)
   if not vim.api.nvim_win_is_valid(win) then return end
   vim.wo[win].cursorline = saved.cursorline
   vim.wo[win].number = saved.number
+end
+
+local function prepare_window(win)
+  save_window_opts(win)
+  vim.wo[win].cursorline = true
+  vim.wo[win].number = false
 end
 
 local function maybe_restore_window_opts(win)
@@ -258,37 +274,15 @@ vim.api.nvim_create_autocmd("WinClosed", {
   end,
 })
 
-local function open_view(uri, view_name, context)
-  local win = vim.api.nvim_get_current_win()
-  save_window_opts(win)
-
-  -- Reuse an existing buffer for this URI instead of hitting E95.
-  local existing = vim.fn.bufnr(uri)
-  if existing ~= -1 and vim.api.nvim_buf_is_valid(existing) and states[existing] then
-    vim.api.nvim_set_current_buf(existing)
-    vim.wo[win].cursorline = true
-    vim.wo[win].number = false
-    local s = states[existing]
-    if #s.stack > 0 then load_view(existing, s.stack[#s.stack]) end
-    return
+local function init_state(buf, uri, parent_uri)
+  local s = states[buf]
+  if s then
+    s.uri = uri
+    if parent_uri ~= nil then s.parent_uri = parent_uri end
+    return s
   end
 
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_set_current_buf(buf)
-
-  vim.bo[buf].bufhidden = "wipe"
-  vim.wo[win].cursorline = true
-  vim.wo[win].number = false
-  vim.bo[buf].modifiable = false
-  local named = pcall(vim.api.nvim_buf_set_name, buf, uri)
-  if not named then
-    pcall(vim.api.nvim_buf_delete, buf, { force = true })
-    restore_window_opts(win)
-    E.notify(E.new("Buffer already exists: " .. uri))
-    return
-  end
-
-  local s = { stack = {}, _keymap_keys = nil, uri = uri }
+  s = { uri = uri, parent_uri = parent_uri, _keymap_keys = nil }
   states[buf] = s
 
   local group = vim.api.nvim_create_augroup("spoil_explorer_" .. buf, { clear = true })
@@ -304,15 +298,102 @@ local function open_view(uri, view_name, context)
     group = group,
     buffer = buf,
     callback = function()
+      local state = states[buf]
+      if state and buffers[state.uri] == buf then buffers[state.uri] = nil end
       states[buf] = nil
       vim.schedule(function() pcall(vim.api.nvim_del_augroup_by_id, group) end)
     end,
   })
 
-  local view = { name = view_name, items = {}, cursor = 1, context = context or {} }
-  table.insert(s.stack, view)
-  load_view(buf, view)
+  return s
 end
+
+local function load_uri_into(buf, uri, parent_uri)
+  local spec = spec_for_uri(uri)
+  if not spec then return end
+
+  local s = init_state(buf, uri, parent_uri)
+  s.view = { name = spec.name, items = {}, cursor = 1, context = spec.context }
+
+  vim.bo[buf].bufhidden = "hide"
+  vim.bo[buf].modifiable = false
+  load_view(buf, s.view)
+end
+
+open_view = function(uri, view_name, context, parent_uri)
+  local existing = buffers[uri]
+  if existing and (not vim.api.nvim_buf_is_valid(existing) or not states[existing]) then
+    buffers[uri] = nil
+    existing = nil
+  end
+  if not existing then
+    local named = vim.fn.bufnr(uri)
+    if named ~= -1 and vim.api.nvim_buf_is_valid(named) then existing = named end
+  end
+
+  local win = vim.api.nvim_get_current_win()
+  if existing then
+    prepare_window(win)
+    vim.api.nvim_win_set_buf(win, existing)
+    local s = states[existing]
+    if s then
+      if parent_uri ~= nil then s.parent_uri = parent_uri end
+      load_view(existing, s.view)
+    else
+      buffers[uri] = existing
+      load_uri_into(existing, uri, parent_uri)
+    end
+    return existing
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  prepare_window(win)
+  vim.api.nvim_win_set_buf(win, buf)
+  vim.bo[buf].modifiable = false
+
+  local named = pcall(vim.api.nvim_buf_set_name, buf, uri)
+  if not named then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    restore_window_opts(win)
+    E.notify(E.new("Buffer already exists: " .. uri))
+    return
+  end
+
+  buffers[uri] = buf
+  load_uri_into(buf, uri, parent_uri)
+  return buf
+end
+
+local uri_group = vim.api.nvim_create_augroup("spoil_explorer_uri", { clear = true })
+
+vim.api.nvim_create_autocmd({ "BufReadCmd", "BufNewFile" }, {
+  group = uri_group,
+  pattern = "spoil://*",
+  callback = function(args)
+    local uri = vim.api.nvim_buf_get_name(args.buf)
+    if not spec_for_uri(uri) then return end
+
+    local s = states[args.buf]
+    if s and s.uri == uri then return end
+
+    local existing = buffers[uri]
+    if existing and existing ~= args.buf and vim.api.nvim_buf_is_valid(existing) and states[existing] then
+      local win = vim.api.nvim_get_current_win()
+      prepare_window(win)
+      vim.api.nvim_win_set_buf(win, existing)
+      vim.schedule(function()
+        if vim.api.nvim_buf_is_valid(args.buf) then
+          pcall(vim.api.nvim_buf_delete, args.buf, { force = true })
+        end
+      end)
+      return
+    end
+
+    buffers[uri] = args.buf
+    prepare_window(vim.api.nvim_get_current_win())
+    load_uri_into(args.buf, uri)
+  end,
+})
 
 function M.open_playlists()
   open_view("spoil://playlists", "playlists", {})
@@ -333,8 +414,7 @@ end
 function M.get_selected_item()
   local buf = visible_spoil_buf()
   local s = buf and states[buf]
-  if not s or not s.stack or #s.stack == 0 then return nil end
-  local v = s.stack[#s.stack]
+  local v = s and s.view
   if not v or not v.items or type(v.items) ~= "table" or #v.items == 0 then return nil end
 
   local win = window_for_buffer(buf)

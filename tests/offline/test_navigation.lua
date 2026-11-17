@@ -46,27 +46,28 @@ T["playlists push and pop the tracks view"] = function()
       %s
       local explorer = require("spoil.explorer")
       explorer.open_playlists()
-      local buf = vim.api.nvim_get_current_buf()
-      local before = { name = vim.api.nvim_buf_get_name(buf), filetype = vim.bo[buf].filetype }
+      local playlists_buf = vim.api.nvim_get_current_buf()
+      local before = { name = vim.api.nvim_buf_get_name(playlists_buf), filetype = vim.bo[playlists_buf].filetype }
 
       vim.cmd("normal! j")
       vim.wait(20)
       local cursor_before = vim.api.nvim_win_get_cursor(0)[1]
 
-      key(buf, "<CR>")()
+      key(playlists_buf, "<CR>")()
+      local tracks_buf = vim.api.nvim_get_current_buf()
       local pushed = {
-        same_buf = vim.api.nvim_get_current_buf() == buf,
-        name = vim.api.nvim_buf_get_name(buf),
-        filetype = vim.bo[buf].filetype,
+        same_buf = tracks_buf == playlists_buf,
+        name = vim.api.nvim_buf_get_name(tracks_buf),
+        filetype = vim.bo[tracks_buf].filetype,
         track = explorer.get_selected_track(),
-        lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false),
+        lines = vim.api.nvim_buf_get_lines(tracks_buf, 0, -1, false),
       }
 
-      key(buf, "<BS>")()
+      key(tracks_buf, "<BS>")()
       local popped = {
-        same_buf = vim.api.nvim_get_current_buf() == buf,
-        name = vim.api.nvim_buf_get_name(buf),
-        filetype = vim.bo[buf].filetype,
+        same_buf = vim.api.nvim_get_current_buf() == playlists_buf,
+        name = vim.api.nvim_buf_get_name(0),
+        filetype = vim.bo.filetype,
         cursor = vim.api.nvim_win_get_cursor(0)[1],
         playlist = explorer.get_selected_playlist(),
       }
@@ -76,7 +77,7 @@ T["playlists push and pop the tracks view"] = function()
 
   eq(r.before, { name = "spoil://playlists", filetype = "spoil-playlists" })
   eq(r.cursor_before, 2)
-  eq(r.pushed.same_buf, true)
+  eq(r.pushed.same_buf, false)
   eq(r.pushed.name, "spoil://playlist/p2")
   eq(r.pushed.filetype, "spoil-tracks")
   eq(r.pushed.track.uri, "spotify:track:p2")
