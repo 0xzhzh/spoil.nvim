@@ -21,7 +21,7 @@ return {
       function(view, ctx)
         local item = ctx.selected_item()
         if not item then return end
-        require("spoil.explorer").open_playlist(item.id)
+        ctx.push_view("tracks", { playlist_id = item.id })
       end,
     },
     {

@@ -57,6 +57,19 @@ local function render(buf, view)
   end
 end
 
+local function view_uri(view)
+  if view.name == "tracks" and view.context and view.context.playlist_id then
+    return "spoil://playlist/" .. view.context.playlist_id
+  end
+  return "spoil://" .. view.name
+end
+
+local function set_buffer_uri(buf, view)
+  local uri = view_uri(view)
+  if vim.api.nvim_buf_get_name(buf) == uri then return end
+  pcall(vim.api.nvim_buf_set_name, buf, uri)
+end
+
 local function apply_keymaps(buf, view)
   local s = get_state()
   if not s then return end
@@ -74,30 +87,39 @@ local function apply_keymaps(buf, view)
     push_view = function(name, c)
       local s2 = get_state()
       if not s2 then return end
+      if not views[name] then return E.notify(E.unknown_view(name)) end
+
+      c = c or {}
       if name == "tracks" then
-        local pid = c and c.playlist_id
+        local pid = c.playlist_id
         if not pid then
           local p = M.get_selected_playlist()
           if p then pid = p.id end
         end
-        if pid then
-          return M.open_playlist(pid)
-        end
+        if not pid then return E.notify(E.no_playlist_selected()) end
+        c = vim.tbl_extend("force", c, { playlist_id = pid })
       end
-      if not views[name] then return E.notify(E.unknown_view(name)) end
-      local new_view = { name = name, items = {}, cursor = 1, context = c or {} }
+
+      local parent = s2.stack[#s2.stack]
+      if parent then parent.cursor = vim.api.nvim_win_get_cursor(0)[1] end
+
+      local new_view = { name = name, items = {}, cursor = 1, context = c }
       table.insert(s2.stack, new_view)
+      set_buffer_uri(buf, new_view)
       load_view(buf, new_view)
     end,
     pop_view = function()
       local s2 = get_state()
       if not s2 then return end
       if #s2.stack <= 1 then
+        local v = s2.stack[1]
+        if v and v.name == "tracks" then return M.open_playlists() end
         pcall(vim.api.nvim_buf_delete, buf, { force = true })
         return
       end
       table.remove(s2.stack)
       local prev = s2.stack[#s2.stack]
+      set_buffer_uri(buf, prev)
       render(buf, prev)
       apply_keymaps(buf, prev)
     end,

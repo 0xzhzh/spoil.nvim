@@ -40,7 +40,7 @@ return {
     {
       "<BS>",
       function(view, ctx)
-        require("spoil.explorer").open_playlists()
+        ctx.pop_view()
       end,
     },
     {
