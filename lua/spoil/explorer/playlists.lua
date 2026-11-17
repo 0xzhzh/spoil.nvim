@@ -8,9 +8,7 @@ return {
   end,
   render = function(item)
     local count = "?"
-    if type(item.items) == "table" and item.items.total then
-      count = item.items.total
-    elseif type(item.tracks) == "table" and item.tracks.total then
+    if type(item.tracks) == "table" and item.tracks.total then
       count = item.tracks.total
     end
     return item.name .. "  (" .. count .. " tracks)"

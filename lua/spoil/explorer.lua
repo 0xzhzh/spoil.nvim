@@ -274,7 +274,10 @@ local function open_view(uri, view_name, context)
   vim.api.nvim_create_autocmd("BufWipeout", {
     group = group,
     buffer = buf,
-    callback = function() states[buf] = nil end,
+    callback = function()
+      states[buf] = nil
+      vim.schedule(function() pcall(vim.api.nvim_del_augroup_by_id, group) end)
+    end,
   })
 
   local view = { name = view_name, items = {}, cursor = 1, context = context or {} }

@@ -8,7 +8,7 @@ T["reuses an existing buffer for the same URI"] = function()
     local api = require("spoil.api")
     api.my_playlists = function(_, cb)
       cb(nil, {
-        items = { { id = "p1", name = "Mix", uri = "spotify:playlist:p1", items = { total = 1 } } },
+        items = { { id = "p1", name = "Mix", uri = "spotify:playlist:p1", tracks = { total = 1 } } },
         total = 1,
       })
     end

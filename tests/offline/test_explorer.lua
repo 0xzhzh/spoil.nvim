@@ -13,7 +13,7 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
     end
     api.my_playlists = function(_, cb)
       cb(nil, {
-        items = { { id = "p1", name = "Mix", uri = "spotify:playlist:p1", items = { total = 2 } } },
+        items = { { id = "p1", name = "Mix", uri = "spotify:playlist:p1", tracks = { total = 2 } } },
         total = 1,
       })
     end
@@ -93,8 +93,8 @@ T["background re-render leaves other windows' cursors alone"] = function()
     -- Background fetch resolves while the file buffer is current
     pending(nil, {
       items = {
-        { id = "p1", name = "One", uri = "spotify:playlist:p1", items = { total = 1 } },
-        { id = "p2", name = "Two", uri = "spotify:playlist:p2", items = { total = 2 } },
+        { id = "p1", name = "One", uri = "spotify:playlist:p1", tracks = { total = 1 } },
+        { id = "p2", name = "Two", uri = "spotify:playlist:p2", tracks = { total = 2 } },
       },
       total = 2,
     })
@@ -111,6 +111,29 @@ T["background re-render leaves other windows' cursors alone"] = function()
   eq(r.file_line, 4)
   eq(r.spoil_line, 1)
   eq(r.spoil_lines, 2)
+end
+
+T["cleans up per-buffer autocmd groups"] = function()
+  local r = child.lua_get([[(function()
+    local api = require("spoil.api")
+    api.my_playlists = function(_, cb) cb(nil, { items = {}, total = 0 }) end
+
+    local explorer = require("spoil.explorer")
+    explorer.open_playlists()
+    local buf = vim.api.nvim_get_current_buf()
+    local group = "spoil_explorer_" .. buf
+    local before = #vim.api.nvim_get_autocmds({ group = group })
+
+    vim.api.nvim_buf_delete(buf, { force = true })
+    local deleted = vim.wait(1000, function()
+      return not pcall(vim.api.nvim_get_autocmds, { group = group })
+    end)
+
+    return { before = before, deleted = deleted }
+  end)()]])
+
+  eq(r.before > 0, true)
+  eq(r.deleted, true)
 end
 
 return T
