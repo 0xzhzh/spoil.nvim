@@ -6,13 +6,6 @@ local E = require("spoil.error")
 
 local encode_form = http.encode_form
 
-local http_methods = {
-  get = http.get,
-  post = http.post,
-  put = http.put,
-  delete = http.delete,
-}
-
 local function resolve_client_id()
   local id = config.options.auth.client_id
   if not id then
@@ -85,7 +78,7 @@ local function build_opts(token, data)
 end
 
 local function request(method, tokens, url, data)
-  local f = http_methods[method]
+  local f = http[method]
   local opts = build_opts(tokens.access_token, data)
   local resp = f(url, opts)
 
@@ -129,7 +122,7 @@ local function refresh_token_async(refresh_token, cb)
 end
 
 local function request_async(method, session, url, data, cb)
-  local f = http_methods[method]
+  local f = http[method]
   local opts = build_opts(session.access_token, data)
 
   local function run(retried)

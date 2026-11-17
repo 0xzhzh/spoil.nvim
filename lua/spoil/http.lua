@@ -1,5 +1,9 @@
 local M = {}
 
+---@alias spoil.HttpResponse { status: integer, body: string }
+---@alias spoil.HttpOpts { headers?: table<string, string>, body?: string, callback?: fun(resp: spoil.HttpResponse) }
+---@alias spoil.HttpTransport fun(method: string, url: string, opts: spoil.HttpOpts): spoil.HttpResponse?
+
 function M.encode_form(params)
   local parts = {}
   for k, v in pairs(params) do
@@ -37,7 +41,9 @@ local function read_tmp(tmp)
   return body
 end
 
-local function request(method, url, opts)
+--- Default transport: shell out to curl.
+---@type spoil.HttpTransport
+local function curl_transport(method, url, opts)
   opts = opts or {}
   local cmd, tmp = build_curl(method, url, opts)
 
@@ -55,6 +61,22 @@ local function request(method, url, opts)
     local status_line = vim.fn.system(cmd)
     return { status = tonumber(status_line) or 0, body = read_tmp(tmp) }
   end
+end
+
+M.transport = nil
+
+--- Replace the HTTP transport (used by tests). Pass nil to restore curl.
+---@param transport? spoil.HttpTransport
+function M.set_transport(transport)
+  if transport ~= nil then
+    assert(type(transport) == "function", "transport must be a function or nil")
+  end
+  M.transport = transport
+end
+
+local function request(method, url, opts)
+  local transport = M.transport or curl_transport
+  return transport(method, url, opts or {})
 end
 
 function M.get(url, opts) return request("GET", url, opts) end
