@@ -1,7 +1,14 @@
 local M = {}
 
----@alias spoil.HttpResponse { status: integer, body: string }
----@alias spoil.HttpOpts { headers?: table<string, string>, body?: string, callback?: fun(resp: spoil.HttpResponse) }
+-- Transport-level timeouts. curl has no total deadline by default: without
+-- these, a stalled connection freezes the sync path (`vim.fn.system` blocks
+-- the UI) and leaves the async path's callback unfired forever. Overridable
+-- per-request via `opts.timeout` / `opts.connect_timeout` (seconds).
+local DEFAULT_CONNECT_TIMEOUT = 5
+local DEFAULT_TIMEOUT = 10
+
+---@alias spoil.HttpResponse { status: integer, body: string, exit_code?: integer }
+---@alias spoil.HttpOpts { headers?: table<string, string>, body?: string, callback?: fun(resp: spoil.HttpResponse), timeout?: integer, connect_timeout?: integer }
 ---@alias spoil.HttpTransport fun(method: string, url: string, opts: spoil.HttpOpts): spoil.HttpResponse?
 
 function M.encode_form(params)
@@ -15,7 +22,12 @@ end
 local function build_curl(method, url, opts)
   opts = opts or {}
   local tmp = vim.fn.tempname()
-  local cmd = { "curl", "-s", "-X", method, "-o", tmp, "-w", "%{http_code}" }
+  local cmd = {
+    "curl", "-s",
+    "--connect-timeout", tostring(opts.connect_timeout or DEFAULT_CONNECT_TIMEOUT),
+    "--max-time", tostring(opts.timeout or DEFAULT_TIMEOUT),
+    "-X", method, "-o", tmp, "-w", "%{http_code}",
+  }
 
   for k, v in pairs(opts.headers or {}) do
     table.insert(cmd, "-H")
@@ -48,18 +60,29 @@ local function curl_transport(method, url, opts)
   local cmd, tmp = build_curl(method, url, opts)
 
   if opts.callback then
+    local status = 0
     vim.fn.jobstart(cmd, {
       stdout_buffered = true,
       on_stdout = function(_, lines)
-        local status = tonumber(lines[1]) or 0
+        status = tonumber(lines[1]) or 0
+      end,
+      -- Fire the user callback from on_exit, not on_stdout: on_exit runs even
+      -- when curl produces no stdout (timed out mid-request, killed), so the
+      -- callback is guaranteed to fire exactly once. A transport failure
+      -- (`exit_code ~= 0`) prints 000 for `%{http_code}`, i.e. status 0.
+      on_exit = function(_, code)
         vim.schedule(function()
-          opts.callback({ status = status, body = read_tmp(tmp) })
+          opts.callback({ status = status, body = read_tmp(tmp), exit_code = code })
         end)
       end,
     })
   else
     local status_line = vim.fn.system(cmd)
-    return { status = tonumber(status_line) or 0, body = read_tmp(tmp) }
+    return {
+      status = tonumber(status_line) or 0,
+      body = read_tmp(tmp),
+      exit_code = vim.v.shell_error,
+    }
   end
 end
 

@@ -68,18 +68,21 @@ function M.add_query(url, params)
   return url .. "?" .. table.concat(parts, "&")
 end
 
-local function build_opts(token, data)
+local function build_opts(token, data, http_opts)
   local opts = { headers = { Authorization = "Bearer " .. token } }
   if data then
     opts.headers["Content-Type"] = "application/json"
     opts.body = vim.fn.json_encode(data)
   end
+  if http_opts then
+    opts = vim.tbl_extend("force", opts, http_opts)
+  end
   return opts
 end
 
-local function request(method, tokens, url, data)
+local function request(method, tokens, url, data, http_opts)
   local f = http[method]
-  local opts = build_opts(tokens.access_token, data)
+  local opts = build_opts(tokens.access_token, data, http_opts)
   local resp = f(url, opts)
 
   if resp.status == 401 then
@@ -88,7 +91,7 @@ local function request(method, tokens, url, data)
       state.clear_tokens()
       return E.not_authenticated()
     end
-    resp = f(url, build_opts(new_token, data))
+    resp = f(url, build_opts(new_token, data, http_opts))
   end
 
   if resp.status == 429 then return E.rate_limited() end
@@ -121,9 +124,9 @@ local function refresh_token_async(refresh_token, cb)
   })
 end
 
-local function request_async(method, session, url, data, cb)
+local function request_async(method, session, url, data, cb, http_opts)
   local f = http[method]
-  local opts = build_opts(session.access_token, data)
+  local opts = build_opts(session.access_token, data, http_opts)
 
   local function run(retried)
     opts.callback = function(resp)
@@ -177,7 +180,7 @@ local function check(cb)
   return nil, tokens, cb
 end
 
-function M.get(url, callback)
+function M.get(url, callback, http_opts)
   local auth_err, tokens, cb = check(callback)
   if auth_err then return auth_err end
   if cb then
@@ -188,9 +191,9 @@ function M.get(url, callback)
       local data = parse(resp)
       if data.msg then return cb(data, nil) end
       cb(nil, data)
-    end)
+    end, http_opts)
   else
-    local resp = request("get", tokens, url, nil)
+    local resp = request("get", tokens, url, nil, http_opts)
     if resp.msg then return resp end
     if resp.status == 204 then return {} end
     if resp.status ~= 200 then return api_error(resp) end

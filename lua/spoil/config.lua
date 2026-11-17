@@ -33,6 +33,7 @@ M.defaults = {
     fmt = { "artist", "title" },
     not_playing = "",
     interval = 5000,
+    timeout = 4,
   },
 }
 

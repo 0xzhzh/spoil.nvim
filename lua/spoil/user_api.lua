@@ -101,7 +101,7 @@ function M.statusline()
     status_timer = vim.uv.new_timer()
     assert(status_timer, "uv.new_timer() returned nil?")
     status_timer:start(0, sl.interval, vim.schedule_wrap(function()
-      api.now_playing(nil, function(err, data)
+      api.now_playing({ timeout = sl.timeout }, function(err, data)
         if err then
           if err.status == 401 then
             status_timer:stop()

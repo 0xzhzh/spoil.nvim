@@ -4,11 +4,16 @@ local M = {}
 ---@alias spoil.Callback fun(err: spoil.Error|nil, data: table|nil)
 
 --- Get the currently playing track. Returns 204 if nothing is playing.
----@param _ nil
+--- `opts` may carry transport options (`timeout`, `connect_timeout`, seconds).
+---@param opts? { timeout?: integer, connect_timeout?: integer }
 ---@param callback? spoil.Callback
 ---@return table|spoil.Error
-function M.now_playing(_, callback)
-  return H.get("https://api.spotify.com/v1/me/player/currently-playing", callback)
+function M.now_playing(opts, callback)
+  local http_opts
+  if opts then
+    http_opts = { timeout = opts.timeout, connect_timeout = opts.connect_timeout }
+  end
+  return H.get("https://api.spotify.com/v1/me/player/currently-playing", callback, http_opts)
 end
 
 --- Get the current user's profile.
