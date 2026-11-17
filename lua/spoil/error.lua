@@ -15,6 +15,7 @@ M.messages = {
   rate_limited = "Rate limited by Spotify; try again shortly",
   parse_failed = "Failed to parse the Spotify response",
   token_refresh_failed = "Failed to refresh the Spotify access token",
+  grant_rejected = "Spotify session expired; run :Spoil login to re-authenticate",
   api_error = "API error: HTTP %s",
   no_devices = "No devices available. Open Spotify on a device first.",
   no_device_selected = "No device selected",
@@ -58,8 +59,20 @@ function M.parse_failed(resp)
 end
 
 ---@return spoil.Error
-function M.token_refresh_failed()
-  return M.new(M.messages.token_refresh_failed, { status = 0 })
+function M.token_refresh_failed(status)
+  return M.new(M.messages.token_refresh_failed, { status = status or 0 })
+end
+
+--- Refresh grant rejected (`invalid_grant`); the only refresh failure that may wipe tokens.
+---@param description? string
+---@return spoil.Error
+function M.grant_rejected(description)
+  return M.new(M.messages.grant_rejected, {
+    status = 400,
+    fatal = true,
+    reason = "invalid_grant",
+    body = description,
+  })
 end
 
 --- Build an error from a Spotify API error response body.

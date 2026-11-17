@@ -15,15 +15,29 @@ local function resolve_client_id()
   return id
 end
 
+--- Only a 400 `invalid_grant` is fatal; other refresh failures may be transient.
+---@param resp spoil.HttpResponse
+---@return spoil.Error
+local function classify_refresh_failure(resp)
+  if resp.status == 400 then
+    local ok, body = pcall(vim.fn.json_decode, resp.body or "")
+    if ok and type(body) == "table" and body.error == "invalid_grant" then
+      return E.grant_rejected(body.error_description)
+    end
+  end
+  return E.token_refresh_failed(resp.status)
+end
+
 local function refresh_access_token()
   local tokens = state.load_tokens()
   if not tokens or not tokens.refresh_token then
-    return nil
+    return nil, E.grant_rejected("no refresh token stored")
   end
 
   local client_id = resolve_client_id()
   if not client_id then
-    return nil
+    -- Config problem; keep the tokens.
+    return nil, E.token_refresh_failed()
   end
 
   local resp = http.post("https://accounts.spotify.com/api/token", {
@@ -36,12 +50,12 @@ local function refresh_access_token()
   })
 
   if resp.status ~= 200 then
-    return nil
+    return nil, classify_refresh_failure(resp)
   end
 
   local ok, new_tokens = pcall(vim.fn.json_decode, resp.body)
   if not ok then
-    return nil
+    return nil, E.parse_failed(resp)
   end
 
   new_tokens.refresh_token = new_tokens.refresh_token or tokens.refresh_token
@@ -86,10 +100,13 @@ local function request(method, tokens, url, data, http_opts)
   local resp = f(url, opts)
 
   if resp.status == 401 then
-    local new_token = refresh_access_token()
+    local new_token, rerr = refresh_access_token()
     if not new_token then
-      state.clear_tokens()
-      return E.not_authenticated()
+      if rerr and rerr.fatal then
+        state.clear_tokens()
+        rerr = E.not_authenticated()
+      end
+      return rerr or E.token_refresh_failed()
     end
     resp = f(url, build_opts(new_token, data, http_opts))
   end
@@ -98,11 +115,11 @@ local function request(method, tokens, url, data, http_opts)
   return resp
 end
 
---- Async counterpart of refresh_access_token. Calls cb(err, new_tokens).
+--- Async refresh; cb(err, tokens). Only `err.fatal` may wipe tokens.
 local function refresh_token_async(refresh_token, cb)
   local client_id = resolve_client_id()
   if not client_id then
-    return cb(E.not_authenticated())
+    return cb(E.token_refresh_failed())
   end
   http.post("https://accounts.spotify.com/api/token", {
     headers = { ["Content-Type"] = "application/x-www-form-urlencoded" },
@@ -113,11 +130,11 @@ local function refresh_token_async(refresh_token, cb)
     }),
     callback = function(resp)
       if resp.status ~= 200 then
-        return cb(E.not_authenticated())
+        return cb(classify_refresh_failure(resp))
       end
       local ok, tokens = pcall(vim.fn.json_decode, resp.body)
       if not ok then
-        return cb(E.token_refresh_failed())
+        return cb(E.parse_failed(resp))
       end
       cb(nil, tokens)
     end,
@@ -131,9 +148,16 @@ local function request_async(method, session, url, data, cb, http_opts)
   local function run(retried)
     opts.callback = function(resp)
       if resp.status == 401 and not retried then
+        if not session.refresh_token then
+          state.clear_tokens()
+          return cb(E.not_authenticated(), nil)
+        end
         refresh_token_async(session.refresh_token, function(err, nt)
           if err then
-            state.clear_tokens()
+            if err.fatal then
+              state.clear_tokens()
+              err = E.not_authenticated()
+            end
             return cb(err, nil)
           end
           session.access_token = nt.access_token

@@ -1,9 +1,7 @@
 local M = {}
 
--- Transport-level timeouts. curl has no total deadline by default: without
--- these, a stalled connection freezes the sync path (`vim.fn.system` blocks
--- the UI) and leaves the async path's callback unfired forever. Overridable
--- per-request via `opts.timeout` / `opts.connect_timeout` (seconds).
+-- curl has no default deadline; without these, a stalled request freezes
+-- the sync path forever. Per-request: `opts.timeout` / `opts.connect_timeout`.
 local DEFAULT_CONNECT_TIMEOUT = 5
 local DEFAULT_TIMEOUT = 10
 
@@ -66,10 +64,7 @@ local function curl_transport(method, url, opts)
       on_stdout = function(_, lines)
         status = tonumber(lines[1]) or 0
       end,
-      -- Fire the user callback from on_exit, not on_stdout: on_exit runs even
-      -- when curl produces no stdout (timed out mid-request, killed), so the
-      -- callback is guaranteed to fire exactly once. A transport failure
-      -- (`exit_code ~= 0`) prints 000 for `%{http_code}`, i.e. status 0.
+      -- on_exit runs even when curl prints nothing, so the callback always fires.
       on_exit = function(_, code)
         vim.schedule(function()
           opts.callback({ status = status, body = read_tmp(tmp), exit_code = code })
