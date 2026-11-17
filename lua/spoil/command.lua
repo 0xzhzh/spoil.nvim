@@ -43,6 +43,10 @@ local commands = {
     desc = "Select and transfer to a playback device",
     run = function() user_api.select_device() end,
   },
+  queue = {
+    desc = "Add the selected track to the queue",
+    run = function() user_api.queue_selected() end,
+  },
   login = {
     desc = "Log in to Spotify",
     run = function() user_api.login() end,

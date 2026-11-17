@@ -19,6 +19,7 @@ M.messages = {
   no_devices = "No devices available. Open Spotify on a device first.",
   no_device_selected = "No device selected",
   no_playlist_selected = "No playlist selected",
+  no_track_selected = "No track selected",
   not_implemented = "%s is not implemented yet",
   unknown_view = "Unknown view: %s",
   unknown_command = "Unknown command '%s'",
@@ -104,6 +105,11 @@ end
 ---@return spoil.Error
 function M.no_playlist_selected()
   return M.new(M.messages.no_playlist_selected)
+end
+
+---@return spoil.Error
+function M.no_track_selected()
+  return M.new(M.messages.no_track_selected)
 end
 
 ---@param feature string

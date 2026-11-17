@@ -219,4 +219,12 @@ function M.get_selected_playlist()
   return nil
 end
 
+function M.get_selected_track()
+  local item = M.get_selected_item()
+  if not item then return nil end
+  local track = item.item or item.track
+  if track and type(track.uri) == "string" then return track end
+  return nil
+end
+
 return M

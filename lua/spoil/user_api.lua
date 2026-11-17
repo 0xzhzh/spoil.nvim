@@ -154,6 +154,22 @@ function M.previous_track()
   end)
 end
 
+--- Add a track URI to the end of the playback queue.
+---@param uri string
+function M.add_to_queue(uri)
+  api.add_to_queue({ uri = uri }, function(err)
+    if err then return E.notify(err) end
+    notify.info("Added to queue", { icon = "➕" })
+  end)
+end
+
+--- Add the track selected in a spoil view to the end of the playback queue.
+function M.queue_selected()
+  local track = explorer.get_selected_track()
+  if not track then return E.notify(E.no_track_selected()) end
+  M.add_to_queue(track.uri)
+end
+
 --- Device entries for `vim.ui.select`, annotated with the active device.
 local function device_items(devices)
   local items = {}

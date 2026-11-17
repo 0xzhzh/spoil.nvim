@@ -34,6 +34,9 @@ return {
     { "<BS>", function(view, ctx)
       require("spoil.explorer").open_playlists()
     end },
+    { "a", function(view, ctx)
+      require("spoil").queue_selected()
+    end },
     { "r", function(view, ctx)
       ctx.refresh()
     end },
