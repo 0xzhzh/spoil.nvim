@@ -1,7 +1,6 @@
 local H = require("spoil.api_helpers")
 local M = {}
 
----@alias spoil.Error { msg: string, status: integer }
 ---@alias spoil.Callback fun(err: spoil.Error|nil, data: table|nil)
 
 --- Get the currently playing track. Returns 204 if nothing is playing.

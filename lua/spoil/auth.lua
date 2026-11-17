@@ -2,6 +2,7 @@ local config = require("spoil.config")
 local state = require("spoil.state")
 local http = require("spoil.http")
 local notify = require("spoil.notify")
+local E = require("spoil.error")
 
 local M = {}
 
@@ -151,14 +152,12 @@ local function exchange_code(code, verifier, redirect_uri, client_id)
   })
 
   if resp.status ~= 200 then
-    local msg = "token exchange failed (HTTP " .. resp.status .. ")"
+    local description
     pcall(function()
       local body = vim.fn.json_decode(resp.body)
-      if body.error_description then
-        msg = msg .. ": " .. body.error_description
-      end
+      description = body.error_description
     end)
-    error(msg)
+    error(E.token_exchange_failed(resp.status, description).msg)
   end
 
   return vim.fn.json_decode(resp.body)
@@ -182,7 +181,7 @@ local function do_auth(client_id, open_browser, clipboard)
     challenge = generate_code_challenge(verifier)
   end)
   if not ok then
-    return notify.error("Spoil: " .. err)
+    return E.notify(err)
   end
 
   -- Build authorize URL
@@ -230,14 +229,14 @@ local function do_auth(client_id, open_browser, clipboard)
     done = true
     cleanup()
     if result.error then
-      return notify.error("Spoil: Auth failed — " .. result.error)
+      return E.notify("Auth failed — " .. result.error)
     end
     local tokens
     ok, err = pcall(function()
       tokens = exchange_code(result.code, verifier, redirect_uri, client_id)
     end)
     if not ok then
-      return notify.error("Spoil: " .. err)
+      return E.notify(err)
     end
     state.save_tokens(tokens)
     notify.info("Spoil: Authenticated successfully!")
@@ -248,7 +247,7 @@ local function do_auth(client_id, open_browser, clipboard)
     server = start_callback_server(port, on_complete)
   end)
   if not ok then
-    return notify.error("Spoil: " .. err)
+    return E.notify(err)
   end
 
   -- Show floating window (always — status indicator + cancel)

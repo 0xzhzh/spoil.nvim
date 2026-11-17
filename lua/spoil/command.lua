@@ -1,6 +1,6 @@
 --- The `:Spoil` user command and its subcommand dispatch.
 local user_api = require("spoil.user_api")
-local notify = require("spoil.notify")
+local E = require("spoil.error")
 
 local M = {}
 
@@ -49,7 +49,7 @@ local commands = {
   },
   search = {
     desc = "Search for songs/albums/artists",
-    run = function() notify.error("Spoil: search is not implemented yet") end,
+    run = function() E.notify(E.not_implemented("search")) end,
   },
 }
 
@@ -63,7 +63,7 @@ function M.dispatch(args)
   local name = fargs[1]
   local cmd = commands[name]
   if not cmd then
-    notify.error("Spoil: unknown command '" .. name .. "'")
+    E.notify(E.unknown_command(name))
     return
   end
   cmd.run(vim.list_slice(fargs, 2))

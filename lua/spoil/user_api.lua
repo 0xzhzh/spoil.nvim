@@ -2,6 +2,7 @@ local config = require("spoil.config")
 local api = require("spoil.api")
 local explorer = require("spoil.explorer")
 local notify = require("spoil.notify")
+local E = require("spoil.error")
 
 local M = {}
 
@@ -43,7 +44,7 @@ local function require_auth()
   if config.options.auth.auto_auth ~= false then
     require("spoil.auth").auth()
   else
-    notify.error("Not authenticated. Run :lua require('spoil').auth() first")
+    E.notify(E.not_authenticated())
   end
   return false
 end
@@ -113,7 +114,7 @@ end
 function M.notify_now_playing()
   api.now_playing(nil, function(err, data)
     if err or not data then
-      notify.error(err and err.msg or "now_playing: no data received")
+      E.notify(err or E.new("No data received from Spotify"))
       return
     end
     local t = data.item
@@ -132,7 +133,7 @@ function M.next_track()
   api.next_track(nil, function(err)
     if err then
       if is_benign_player_error(err) then return end
-      notify.error(err.msg)
+      E.notify(err)
       return
     end
     vim.defer_fn(M.notify_now_playing, 500)
@@ -143,7 +144,7 @@ function M.previous_track()
   api.previous_track(nil, function(err)
     if err then
       if is_benign_player_error(err) then return end
-      notify.error(err.msg)
+      E.notify(err)
       return
     end
     vim.defer_fn(M.notify_now_playing, 500)
@@ -162,7 +163,7 @@ function M.ensure_device(cb)
       if d.is_active then return cb(nil, nil) end
     end
     if #devices == 0 then
-      return cb({ msg = "No devices available. Open Spotify on a device first." })
+      return cb(E.no_devices())
     end
     if #devices == 1 then
       return cb(nil, devices[1].id)
@@ -175,7 +176,7 @@ function M.ensure_device(cb)
       prompt = "Select Spotify device",
       format_item = function(i) return i.label end,
     }, function(choice)
-      if not choice then return cb({ msg = "No device selected" }) end
+      if not choice then return cb(E.no_device_selected()) end
       cb(nil, choice.id)
     end)
   end)
@@ -184,7 +185,7 @@ end
 function M.play(opts)
   M.ensure_device(function(derr, device_id)
     if derr then
-      notify.error(derr.msg)
+      E.notify(derr)
       return
     end
     opts = opts or {}
@@ -196,7 +197,7 @@ function M.play(opts)
           vim.defer_fn(M.notify_now_playing, 500)
           return
         end
-        notify.error(err.msg)
+        E.notify(err)
         return
       end
       vim.defer_fn(M.notify_now_playing, 500)
@@ -211,7 +212,7 @@ function M.pause()
         notify.info("Paused", { icon = "⏸" })
         return
       end
-      notify.error(err.msg)
+      E.notify(err)
       return
     end
     notify.info("Paused", { icon = "⏸" })
@@ -221,7 +222,7 @@ end
 function M.toggle_playback()
   api.get_playback_state(nil, function(err, data)
     if err or not data then
-      notify.error(err and err.msg or "get_playback_state: no data received")
+      E.notify(err or E.new("No playback state received"))
       return
     end
     if data.is_playing then

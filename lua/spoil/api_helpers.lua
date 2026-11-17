@@ -2,6 +2,7 @@ local M = {}
 local config = require("spoil.config")
 local state = require("spoil.state")
 local http = require("spoil.http")
+local E = require("spoil.error")
 
 local encode_form = http.encode_form
 
@@ -58,7 +59,7 @@ end
 local function parse(resp)
   local ok, data = pcall(vim.fn.json_decode, resp.body)
   if not ok then
-    return { msg = "failed to parse response", status = resp.status, body = resp.body }
+    return E.parse_failed(resp)
   end
   return data
 end
@@ -92,12 +93,12 @@ local function request(method, tokens, url, data)
     local new_token = refresh_access_token()
     if not new_token then
       state.clear_tokens()
-      return { msg = "not authenticated", status = 401 }
+      return E.not_authenticated()
     end
     resp = f(url, build_opts(new_token, data))
   end
 
-  if resp.status == 429 then return { msg = "rate limited", status = 429 } end
+  if resp.status == 429 then return E.rate_limited() end
   return resp
 end
 
@@ -105,7 +106,7 @@ end
 local function refresh_token_async(refresh_token, cb)
   local client_id = resolve_client_id()
   if not client_id then
-    return cb({ msg = "not authenticated", status = 401 })
+    return cb(E.not_authenticated())
   end
   http.post("https://accounts.spotify.com/api/token", {
     headers = { ["Content-Type"] = "application/x-www-form-urlencoded" },
@@ -116,11 +117,11 @@ local function refresh_token_async(refresh_token, cb)
     }),
     callback = function(resp)
       if resp.status ~= 200 then
-        return cb({ msg = "not authenticated", status = 401 })
+        return cb(E.not_authenticated())
       end
       local ok, tokens = pcall(vim.fn.json_decode, resp.body)
       if not ok then
-        return cb({ msg = "token refresh failed", status = 0 })
+        return cb(E.token_refresh_failed())
       end
       cb(nil, tokens)
     end,
@@ -149,7 +150,7 @@ local function request_async(method, session, url, data, cb)
         return
       end
       if resp.status == 429 then
-        cb({ msg = "rate limited", status = 429 }, nil)
+        cb(E.rate_limited(), nil)
         return
       end
       cb(nil, resp)
@@ -160,13 +161,7 @@ local function request_async(method, session, url, data, cb)
 end
 
 local function api_error(resp)
-  local parsed = parse(resp)
-  local msg, reason
-  if not parsed.msg and parsed.error then
-    msg = parsed.error.message
-    reason = parsed.error.reason
-  end
-  return { msg = msg or ("API error: HTTP " .. resp.status), status = resp.status, reason = reason }
+  return E.from_api(resp.status, parse(resp))
 end
 
 local function check_write(resp)
@@ -182,8 +177,9 @@ local function check(cb)
   cb = cb and vim.schedule_wrap(cb)
   local tokens = state.load_tokens()
   if not tokens or not tokens.access_token then
-    if cb then return cb({ msg = "not authenticated", status = 401 }, nil) end
-    return { msg = "not authenticated", status = 401 }
+    local err = E.not_authenticated()
+    if cb then cb(err, nil) end
+    return err
   end
   return nil, tokens, cb
 end

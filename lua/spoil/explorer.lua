@@ -1,5 +1,5 @@
 local M = {}
-local notify = require("spoil.notify")
+local E = require("spoil.error")
 local views = {}
 local states = {}
 local cache = {}
@@ -80,7 +80,7 @@ local function apply_keymaps(buf, view)
           return M.open_playlist(pid)
         end
       end
-      if not views[name] then return notify.error("Unknown view: " .. name) end
+      if not views[name] then return E.notify(E.unknown_view(name)) end
       local new_view = { name = name, items = {}, cursor = 1, context = c or {} }
       table.insert(s2.stack, new_view)
       load_view(buf, new_view)
@@ -139,7 +139,7 @@ load_view = function(buf, view)
 
   vd.fetch(view.context, function(err, data)
     if err then
-      notify.error(err.msg)
+      E.notify(err)
       return
     end
     local items = items_of(data)
@@ -191,7 +191,7 @@ end
 
 function M.open_playlist(id)
   if not id or id == "" then
-    notify.error("No playlist selected")
+    E.notify(E.no_playlist_selected())
     return
   end
   open_view("spoil://playlist/" .. id, "tracks", { playlist_id = id })
