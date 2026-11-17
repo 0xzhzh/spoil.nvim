@@ -7,26 +7,49 @@ local M = {}
 
 local encode_form = http.encode_form
 
-local function generate_code_verifier()
-  local cmd = "openssl rand -base64 48"
-  local result = vim.fn.system(cmd)
-  if vim.v.shell_error ~= 0 then
-    error("openssl not available; cannot generate PKCE verifier")
+-- Encode raw bytes as base64url (RFC 4648 §5), without padding.
+local function base64url_encode(bytes)
+  return (vim.base64.encode(bytes):gsub("+", "-"):gsub("/", "_"):gsub("=+$", ""))
+end
+
+-- Read `n` cryptographically strong random bytes from the system CSPRNG.
+-- `vim.uv.random()` is libuv-backed and cross-platform; /dev/urandom is a
+-- fallback for older luv builds that lack the binding.
+local function random_bytes(n)
+  if vim.uv and vim.uv.random then
+    local ok, bytes = pcall(vim.uv.random, n)
+    if ok and type(bytes) == "string" and #bytes == n then
+      return bytes
+    end
   end
-  result = result:gsub("\n", "")
-  result = result:gsub("+", "-"):gsub("/", "_"):gsub("=+$", "")
-  return result
+
+  local file = io.open("/dev/urandom", "rb")
+  if file then
+    local bytes = file:read(n)
+    file:close()
+    if bytes and #bytes == n then
+      return bytes
+    end
+  end
+
+  error("no cryptographically strong random source available")
+end
+
+-- PKCE code verifier: 48 random bytes -> 64 base64url chars (RFC 7636 allows 43-128).
+local function generate_code_verifier()
+  local verifier = base64url_encode(random_bytes(48))
+  if #verifier < 43 or #verifier > 128 then
+    error("failed to generate a valid PKCE code verifier")
+  end
+  return verifier
 end
 
 local function generate_code_challenge(verifier)
-  local cmd = ("echo -n '%s' | openssl dgst -sha256 -binary | openssl base64"):format(verifier)
-  local result = vim.fn.system(cmd)
-  if vim.v.shell_error ~= 0 then
-    error("openssl not available; cannot compute code challenge")
-  end
-  result = result:gsub("\n", "")
-  result = result:gsub("+", "-"):gsub("/", "_"):gsub("=+$", "")
-  return result
+  local hex = vim.fn.sha256(verifier)
+  local digest = hex:gsub("%x%x", function(pair)
+    return string.char(tonumber(pair, 16))
+  end)
+  return base64url_encode(digest)
 end
 
 local function start_callback_server(port, on_complete)
