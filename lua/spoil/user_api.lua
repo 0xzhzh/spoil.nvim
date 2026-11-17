@@ -74,6 +74,27 @@ end
 local status_item = nil
 local status_timer = nil
 
+--- Format a now-playing item for the statusline.
+---@param item table|nil
+---@return string
+function M.format_status(item)
+  local sl = config.options.statusline
+  if not item then return sl.not_playing end
+
+  local components = {
+    artist = item.artists and item.artists[1] and item.artists[1].name,
+    title = item.name,
+    album = item.album and item.album.name,
+  }
+  local parts = {}
+  for _, key in ipairs(sl.fmt) do
+    local val = components[key]
+    if val then table.insert(parts, val) end
+  end
+  if #parts == 0 then return sl.not_playing end
+  return table.concat(parts, sl.sep)
+end
+
 function M.statusline()
   local sl = config.options.statusline
   if not status_timer then
@@ -99,19 +120,7 @@ function M.statusline()
     end))
   end
 
-  if not status_item then return sl.not_playing end
-  local components = {
-    artist = status_item.artists and status_item.artists[1] and status_item.artists[1].name,
-    title = status_item.name,
-    album = status_item.album and status_item.album.name,
-  }
-  local parts = {}
-  for _, key in ipairs(sl.fmt) do
-    local val = components[key]
-    if val then table.insert(parts, val) end
-  end
-  if #parts == 0 then return sl.not_playing end
-  return table.concat(parts, sl.sep)
+  return M.format_status(status_item)
 end
 
 function M.notify_now_playing()
