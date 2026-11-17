@@ -11,12 +11,36 @@ local function data_dir(file)
   end
 end
 
+local function mkdir_p(path)
+  local stat, stat_err = vim.uv.fs_stat(path)
+  if stat then
+    if stat.type == "directory" then return true end
+    return nil, ("%s exists and is not a directory"):format(path)
+  end
+  if stat_err and not stat_err:find("ENOENT", 1, true) then
+    return nil, stat_err
+  end
+
+  local parent = vim.fs.dirname(path)
+  if parent and parent ~= path then
+    local ok, err = mkdir_p(parent)
+    if not ok then return nil, err end
+  end
+
+  local made, mkdir_err = vim.uv.fs_mkdir(path, private_dir_mode)
+  if not made then
+    -- Another process may have created it between the stat and mkdir.
+    stat = vim.uv.fs_stat(path)
+    if stat and stat.type == "directory" then return true end
+    return nil, mkdir_err
+  end
+  return true
+end
+
 local function ensure_data_dir()
   local dir = data_dir()
-  if vim.fn.isdirectory(dir) == 0 then
-    local ok, err = pcall(vim.fn.mkdir, dir, "p", private_dir_mode)
-    if not ok then return nil, tostring(err) end
-  end
+  local ok, err = mkdir_p(dir)
+  if not ok then return nil, err end
   return dir
 end
 
@@ -51,17 +75,32 @@ local function write_json(path, value)
   return write_private(path, vim.json.encode(value) .. "\n")
 end
 
-function M.load_credentials()
-  local path = data_dir("credentials.json")
-  local ok, data = pcall(vim.fn.readfile, path)
-  if not ok or not data or #data == 0 then
-    return nil
+local function read_file(path)
+  local fd, open_err = vim.uv.fs_open(path, "r", 0)
+  if not fd then return nil, open_err end
+
+  local stat, stat_err = vim.uv.fs_fstat(fd)
+  if not stat then
+    vim.uv.fs_close(fd)
+    return nil, stat_err
   end
-  local ok2, decoded = pcall(vim.json.decode, table.concat(data, "\n"))
-  if not ok2 then
-    return nil
-  end
+
+  local data, read_err = vim.uv.fs_read(fd, stat.size, 0)
+  vim.uv.fs_close(fd)
+  if not data then return nil, read_err end
+  return data
+end
+
+local function load_json(name)
+  local data = read_file(data_dir(name))
+  if not data or data == "" then return nil end
+  local ok, decoded = pcall(vim.json.decode, data)
+  if not ok then return nil end
   return decoded
+end
+
+function M.load_credentials()
+  return load_json("credentials.json")
 end
 
 function M.save_credentials(client_id)
@@ -71,16 +110,7 @@ function M.save_credentials(client_id)
 end
 
 function M.load_tokens()
-  local path = data_dir("tokens.json")
-  local ok, data = pcall(vim.fn.readfile, path)
-  if not ok or not data or #data == 0 then
-    return nil
-  end
-  local ok2, decoded = pcall(vim.json.decode, table.concat(data, "\n"))
-  if not ok2 then
-    return nil
-  end
-  return decoded
+  return load_json("tokens.json")
 end
 
 function M.save_tokens(tokens)
@@ -93,19 +123,20 @@ function M.is_authorized()
   return M.load_tokens() ~= nil
 end
 
-function M.clear_tokens()
-  local path = data_dir("tokens.json")
-  if vim.fn.filereadable(path) == 1 then
-    os.remove(path)
+local function remove_file(path)
+  local stat = vim.uv.fs_stat(path)
+  if stat and stat.type == "file" then
+    vim.uv.fs_unlink(path)
   end
+end
+
+function M.clear_tokens()
+  remove_file(data_dir("tokens.json"))
 end
 
 function M.clear_all()
   for _, name in ipairs({ "credentials.json", "tokens.json" }) do
-    local path = data_dir(name)
-    if vim.fn.filereadable(path) == 1 then
-      os.remove(path)
-    end
+    remove_file(data_dir(name))
   end
 end
 

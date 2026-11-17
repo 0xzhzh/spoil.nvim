@@ -50,6 +50,35 @@ T["writes private JSON files"] = function()
   eq(r.creds_after_clear, nil)
 end
 
+T["uses libuv for reads, deletes, and directory checks"] = function()
+  local r = child.lua_get([[(function()
+    local state = require("spoil.state")
+    state.save_tokens({ access_token = "a" })
+
+    local real_readfile, real_remove = vim.fn.readfile, os.remove
+    local real_isdir, real_filereadable = vim.fn.isdirectory, vim.fn.filereadable
+    vim.fn.readfile = function() error("readfile used") end
+    os.remove = function() error("os.remove used") end
+    vim.fn.isdirectory = function() error("isdirectory used") end
+    vim.fn.filereadable = function() error("filereadable used") end
+
+    local loaded = state.load_tokens()
+    local saved = state.save_tokens({ access_token = "b" })
+    state.clear_tokens()
+    local cleared = state.load_tokens()
+
+    vim.fn.readfile = real_readfile
+    os.remove = real_remove
+    vim.fn.isdirectory = real_isdir
+    vim.fn.filereadable = real_filereadable
+    return { loaded = loaded, saved = saved, cleared = cleared }
+  end)()]])
+
+  eq(r.loaded, { access_token = "a" })
+  eq(r.saved, true)
+  eq(r.cleared, nil)
+end
+
 T["reports write failures instead of raising"] = function()
   local r = child.lua_get([[(function()
     local state = require("spoil.state")
