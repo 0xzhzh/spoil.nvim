@@ -31,19 +31,19 @@ end
 --- incomplete, otherwise `{ code = ... }` on success or `{ error = ... }`.
 ---@param request string
 ---@param expected_state string
----@return { code?: string, error?: string }|nil
+---@return { code?: string, error?: string, retry?: boolean }|nil
 function M.evaluate_callback(request, expected_state)
   local target = request:match("^%a+%s+(%S+)%s+HTTP/")
   if not target then
     if request:find("\r\n\r\n") then
-      return { error = "malformed callback request" }
+      return { error = "malformed callback request", retry = true }
     end
     return nil
   end
 
   local path = target:match("^[^?]*")
   if path ~= "/callback" then
-    return { error = "unexpected callback path: " .. path }
+    return { error = "unexpected callback path: " .. path, retry = true }
   end
 
   local params = parse_query(target)
@@ -57,13 +57,13 @@ function M.evaluate_callback(request, expected_state)
 
   if not params.code or params.code == "" then
     if request:find("\r\n\r\n") then
-      return { error = "no authorization code in callback" }
+      return { error = "no authorization code in callback", retry = true }
     end
     return nil
   end
 
   if params.state ~= expected_state then
-    return { error = "OAuth state mismatch (possible CSRF); authorization rejected" }
+    return { error = "OAuth state mismatch (possible CSRF); authorization rejected", retry = true }
   end
 
   return { code = params.code }
@@ -132,7 +132,9 @@ function M.start_server(port, expected_state, on_complete)
       else
         send_response(client, "400 Bad Request", "Authorization Error", result.error)
       end
-      vim.schedule(function() on_complete(result) end)
+      if result.code or not result.retry then
+        vim.schedule(function() on_complete(result) end)
+      end
     end)
   end)
 

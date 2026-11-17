@@ -8,6 +8,8 @@ local oauth = require("spoil.oauth")
 
 local M = {}
 
+local auth_in_progress = false
+
 local encode_form = http.encode_form
 
 local function show_floating_window(url, on_cancel)
@@ -88,7 +90,7 @@ local function copy_to_clipboard(text)
   end)
 end
 
-local function do_auth(client_id, open_browser, clipboard)
+local function do_auth(client_id, open_browser, clipboard, on_success)
   local port = config.options.auth.port
   local redirect_uri = oauth.redirect_uri(port)
 
@@ -100,6 +102,7 @@ local function do_auth(client_id, open_browser, clipboard)
     oauth_state = pkce.oauth_state()
   end)
   if not ok then
+    auth_in_progress = false
     E.notify(err)
     return
   end
@@ -122,31 +125,48 @@ local function do_auth(client_id, open_browser, clipboard)
   local server
   local win
   local buf
+  local timer
+  local group
   local done = false
 
   local function cleanup()
+    if timer then
+      timer:stop()
+      timer:close()
+      timer = nil
+    end
     if server then pcall(function() server:close() end) end
     if win and vim.api.nvim_win_is_valid(win) then
       pcall(vim.api.nvim_win_close, win, true)
     end
     if buf then pcall(vim.api.nvim_buf_delete, buf, { force = true }) end
+    if group then
+      pcall(vim.api.nvim_del_augroup_by_id, group)
+      group = nil
+    end
+  end
+
+  local function finish(cause)
+    if done then return end
+    done = true
+    auth_in_progress = false
+    cleanup()
+    if cause then E.notify(cause) end
   end
 
   local function cancel()
     if done then return end
-    done = true
-    cleanup()
+    finish()
     notify.warn("Spoil: Auth cancelled")
   end
 
   local function on_complete(result)
     if done then return end
-    done = true
-    cleanup()
     if result.error then
-      E.notify("Auth failed — " .. result.error)
+      finish(E.new("Auth failed — " .. result.error))
       return
     end
+    finish()
     local tokens
     ok, err = pcall(function()
       tokens = exchange_code(result.code, verifier, redirect_uri, client_id)
@@ -161,6 +181,7 @@ local function do_auth(client_id, open_browser, clipboard)
       return
     end
     notify.info("Spoil: Authenticated successfully!")
+    if on_success then on_success() end
   end
 
   -- Start callback server
@@ -168,18 +189,35 @@ local function do_auth(client_id, open_browser, clipboard)
     server = oauth.start_server(port, oauth_state, on_complete)
   end)
   if not ok then
+    auth_in_progress = false
     E.notify(err)
     return
   end
+
+  timer = vim.uv.new_timer()
+  timer:start((config.options.auth.timeout or 300) * 1000, 0, function()
+    vim.schedule(function() finish(E.new("Authentication timed out")) end)
+  end)
 
   -- Show floating window (always — status indicator + cancel)
   local open_err
   win, buf, open_err = show_floating_window(url, cancel)
   if open_err then
-    cleanup()
-    E.notify(E.new("Could not open the authorization window: " .. open_err))
+    finish(E.new("Could not open the authorization window: " .. open_err))
     return
   end
+
+  group = vim.api.nvim_create_augroup("spoil_auth_" .. buf, { clear = true })
+  vim.api.nvim_create_autocmd("WinClosed", {
+    group = group,
+    pattern = tostring(win),
+    callback = cancel,
+  })
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    group = group,
+    buffer = buf,
+    callback = cancel,
+  })
 
   if clipboard and not copied then
     notify.warn("Spoil: Could not copy the authorization URL to the clipboard")
@@ -194,6 +232,11 @@ end
 
 function M.auth(opts)
   opts = opts or {}
+  if auth_in_progress then
+    notify.warn("Spoil: Authentication already in progress")
+    return
+  end
+  auth_in_progress = true
 
   local open_browser
   if opts.open_browser ~= nil then
@@ -215,20 +258,22 @@ function M.auth(opts)
     client_id = creds and creds.client_id or nil
   end
   if client_id then
-    do_auth(client_id, open_browser, clipboard)
+    do_auth(client_id, open_browser, clipboard, opts.on_success)
     return
   end
   vim.ui.input({ prompt = "Spotify Client ID: " }, function(input)
     if not input or input == "" then
+      auth_in_progress = false
       notify.warn("Spoil: Auth cancelled")
       return
     end
     local saved, save_err = state.save_credentials(input)
     if not saved then
-      E.notify(E.storage_failed("Spotify client ID", save_err))
+      auth_in_progress = false
+      E.notify(E.storage_failed("Spotify Client ID", save_err))
       return
     end
-    do_auth(input, open_browser, clipboard)
+    do_auth(input, open_browser, clipboard, opts.on_success)
   end)
 end
 

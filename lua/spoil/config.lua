@@ -7,6 +7,7 @@ M.defaults = {
     open_browser = true,
     clipboard = true,
     port = 12676,
+    timeout = 300,
     scopes = {
       "playlist-read-private",
       "playlist-read-collaborative",

@@ -55,8 +55,8 @@ function M.is_authorized()
   return require("spoil.state").is_authorized()
 end
 
-function M.login()
-  require("spoil.auth").auth()
+function M.login(opts)
+  require("spoil.auth").auth(opts)
 end
 
 --- Backwards-compatible alias for `login()`.
@@ -70,11 +70,12 @@ end
 
 --- Ensure the user is authenticated before an explorer action.
 --- Auto-starts the auth flow when configured, otherwise notifies.
+---@param continuation? fun()
 ---@return boolean ready
-local function require_auth()
+local function require_auth(continuation)
   if M.is_authorized() then return true end
   if config.options.auth.auto_auth ~= false then
-    M.login()
+    M.login({ on_success = continuation })
   else
     E.notify(E.not_authenticated())
   end
@@ -82,17 +83,17 @@ local function require_auth()
 end
 
 function M.open_explorer()
-  if not require_auth() then return end
+  if not require_auth(M.open_explorer) then return end
   explorer.open_playlists()
 end
 
 function M.open_playlists()
-  if not require_auth() then return end
+  if not require_auth(M.open_playlists) then return end
   explorer.open_playlists()
 end
 
 function M.open_playlist(id)
-  if not require_auth() then return end
+  if not require_auth(function() M.open_playlist(id) end) then return end
   if id == nil then
     local p = explorer.get_selected_playlist()
     if p then id = p.id end

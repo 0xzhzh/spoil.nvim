@@ -32,6 +32,14 @@ function S.request(port, request, timeout)
   return table.concat(response)
 end
 
+function S.attempt(expected_state, request)
+  local port = S.free_port()
+  local server = require("spoil.oauth").start_server(port, expected_state, function() end)
+  local response = S.request(port, request)
+  server:close()
+  return response
+end
+
 function S.roundtrip(expected_state, request)
   local result
   local port = S.free_port()
