@@ -276,7 +276,7 @@ function M.play(opts)
       E.notify(derr)
       return
     end
-    opts = opts or {}
+    opts = vim.tbl_extend("force", {}, opts or {})
     if device_id and not opts.device_id then opts.device_id = device_id end
     local resume = not (opts.context_uri or opts.uris)
     api.play(opts, function(err)

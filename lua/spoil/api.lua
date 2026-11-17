@@ -92,11 +92,13 @@ end
 ---@param opts? { device_id?: string, context_uri?: string, uris?: string[], offset?: table, position_ms?: integer }
 ---@param callback? spoil.Callback
 ---@return table|spoil.Error
+local play_body_keys = { "context_uri", "uris", "offset", "position_ms" }
+
 function M.play(opts, callback)
   opts = opts or {}
   local body = {}
-  for k, v in pairs(opts) do
-    if k ~= "device_id" then body[k] = v end
+  for _, key in ipairs(play_body_keys) do
+    if opts[key] ~= nil then body[key] = opts[key] end
   end
   return H.put(
     H.add_query("https://api.spotify.com/v1/me/player/play", { device_id = opts.device_id }),
