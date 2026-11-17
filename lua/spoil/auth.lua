@@ -3,175 +3,12 @@ local state = require("spoil.state")
 local http = require("spoil.http")
 local notify = require("spoil.notify")
 local E = require("spoil.error")
+local pkce = require("spoil.pkce")
+local oauth = require("spoil.oauth")
 
 local M = {}
 
 local encode_form = http.encode_form
-
--- Encode raw bytes as base64url (RFC 4648 §5), without padding.
-local function base64url_encode(bytes)
-  return (vim.base64.encode(bytes):gsub("+", "-"):gsub("/", "_"):gsub("=+$", ""))
-end
-
--- Read `n` cryptographically strong random bytes from the system CSPRNG.
--- `vim.uv.random()` is libuv-backed and cross-platform; /dev/urandom is a
--- fallback for older luv builds that lack the binding.
-local function random_bytes(n)
-  if vim.uv and vim.uv.random then
-    local ok, bytes = pcall(vim.uv.random, n)
-    if ok and type(bytes) == "string" and #bytes == n then
-      return bytes
-    end
-  end
-
-  local file = io.open("/dev/urandom", "rb")
-  if file then
-    local bytes = file:read(n)
-    file:close()
-    if bytes and #bytes == n then
-      return bytes
-    end
-  end
-
-  error("no cryptographically strong random source available")
-end
-
--- PKCE code verifier: 48 random bytes -> 64 base64url chars (RFC 7636 allows 43-128).
-local function generate_code_verifier()
-  local verifier = base64url_encode(random_bytes(48))
-  if #verifier < 43 or #verifier > 128 then
-    error("failed to generate a valid PKCE code verifier")
-  end
-  return verifier
-end
-
-local function generate_code_challenge(verifier)
-  local hex = vim.fn.sha256(verifier)
-  local digest = hex:gsub("%x%x", function(pair)
-    return string.char(tonumber(pair, 16))
-  end)
-  return base64url_encode(digest)
-end
-
---- Random opaque value echoed back by Spotify and checked on the callback to
---- protect against CSRF / authorization-code injection.
-local function generate_oauth_state()
-  return base64url_encode(random_bytes(32))
-end
-
-local function parse_query(target)
-  local params = {}
-  local query = target:match("%?([^#]*)")
-  if not query then return params end
-  for pair in query:gmatch("[^&]+") do
-    local key, value = pair:match("^([^=]+)=?(.*)$")
-    if key then
-      params[vim.uri_decode(key)] = vim.uri_decode(value)
-    end
-  end
-  return params
-end
-
---- Inspect a callback request. Returns nil while the request line is
---- incomplete, otherwise `{ code = ... }` on success or `{ error = ... }`.
-local function evaluate_callback(request, expected_state)
-  local target = request:match("^%a+%s+(%S+)%s+HTTP/")
-  if not target then
-    if request:find("\r\n\r\n") then
-      return { error = "malformed callback request" }
-    end
-    return nil
-  end
-
-  local path = target:match("^[^?]*")
-  if path ~= "/callback" then
-    return { error = "unexpected callback path: " .. path }
-  end
-
-  local params = parse_query(target)
-  if not params.code or params.code == "" then
-    if request:find("\r\n\r\n") then
-      return { error = "no authorization code in callback" }
-    end
-    return nil
-  end
-
-  if params.state ~= expected_state then
-    return { error = "OAuth state mismatch (possible CSRF); authorization rejected" }
-  end
-
-  return { code = params.code }
-end
-
-local function escape_html(text)
-  return (tostring(text)
-    :gsub("&", "&amp;")
-    :gsub("<", "&lt;")
-    :gsub(">", "&gt;")
-    :gsub('"', "&quot;"))
-end
-
-local function send_response(client, status, title, message)
-  local body = ("<html><body><h1>%s</h1><p>%s</p></body></html>"):format(escape_html(title), escape_html(message))
-  local resp = ("HTTP/1.1 %s\r\nContent-Length: %d\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n%s"):format(
-    status,
-    #body,
-    body
-  )
-  client:write(resp, function()
-    client:shutdown()
-    client:close()
-  end)
-end
-
-local function start_callback_server(port, expected_state, on_complete)
-  local loop = vim.loop
-  local server = assert(loop.new_tcp(), "failed to create TCP handle")
-
-  local ok = server:bind("127.0.0.1", port)
-  assert(ok, ("failed to bind to 127.0.0.1:%d"):format(port))
-
-  server:listen(128, function(err)
-    if err then
-      vim.schedule(function() on_complete({ error = "server listen error: " .. tostring(err) }) end)
-      return
-    end
-
-    local client = assert(loop.new_tcp())
-    server:accept(client)
-
-    local chunks = {}
-    local finished = false
-    client:read_start(function(read_err, data)
-      if finished then return end
-
-      if read_err then
-        finished = true
-        vim.schedule(function() on_complete({ error = "read error: " .. tostring(read_err) }) end)
-        return
-      end
-
-      if not data then
-        client:close()
-        return
-      end
-
-      table.insert(chunks, data)
-      local result = evaluate_callback(table.concat(chunks), expected_state)
-      if not result then return end
-
-      finished = true
-      if result.code then
-        send_response(client, "200 OK", "Authenticated!", "Return to Neovim.")
-      else
-        send_response(client, "400 Bad Request", "Authorization Error", result.error)
-      end
-      vim.schedule(function() on_complete(result) end)
-    end)
-  end)
-
-  return server
-end
 
 local function show_floating_window(url, on_cancel)
   local buf = vim.api.nvim_create_buf(false, true)
@@ -244,14 +81,14 @@ end
 
 local function do_auth(client_id, open_browser, clipboard)
   local port = config.options.auth.port
-  local redirect_uri = ("http://127.0.0.1:%d/callback"):format(port)
+  local redirect_uri = oauth.redirect_uri(port)
 
   -- Generate PKCE challenge and OAuth state
   local verifier, challenge, oauth_state
   local ok, err = pcall(function()
-    verifier = generate_code_verifier()
-    challenge = generate_code_challenge(verifier)
-    oauth_state = generate_oauth_state()
+    verifier = pkce.code_verifier()
+    challenge = pkce.code_challenge(verifier)
+    oauth_state = pkce.oauth_state()
   end)
   if not ok then
     return E.notify(err)
@@ -267,11 +104,7 @@ local function do_auth(client_id, open_browser, clipboard)
     scope = table.concat(config.options.auth.scopes, " "),
     state = oauth_state,
   }
-  local qs = {}
-  for k, v in pairs(params) do
-    table.insert(qs, k .. "=" .. vim.uri_encode(v))
-  end
-  local url = "https://accounts.spotify.com/authorize?" .. table.concat(qs, "&")
+  local url = oauth.authorize_url(params)
 
   if clipboard then
     copy_to_clipboard(url)
@@ -318,7 +151,7 @@ local function do_auth(client_id, open_browser, clipboard)
 
   -- Start callback server
   ok, err = pcall(function()
-    server = start_callback_server(port, oauth_state, on_complete)
+    server = oauth.start_server(port, oauth_state, on_complete)
   end)
   if not ok then
     return E.notify(err)
