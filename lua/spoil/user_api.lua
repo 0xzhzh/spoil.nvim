@@ -6,10 +6,8 @@ local E = require("spoil.error")
 
 local M = {}
 
---- Spotify returns a 403 "Restriction violated" player error when a command is
---- a no-op (e.g. resume while playing, pause while paused, skip past the end of
---- the context). It often reports these as reason "UNKNOWN" instead of the
---- specific reason (see spotify/web-api#1433), so treat those as benign too.
+--- Known no-op 403 reasons. Unknown reasons are surfaced as a warning because
+--- they can also mean restricted playback (e.g. missing Premium/allowlist).
 local benign_player_reasons = {
   ALREADY_PLAYING = true,
   ALREADY_PAUSED = true,
@@ -20,7 +18,16 @@ local benign_player_reasons = {
 
 local function is_benign_player_error(err)
   if not err or err.status ~= 403 then return false end
-  return err.reason == nil or err.reason == "UNKNOWN" or benign_player_reasons[err.reason] == true
+  return benign_player_reasons[err.reason] == true
+end
+
+local function is_ambiguous_player_error(err)
+  if not err or err.status ~= 403 then return false end
+  return err.reason == nil or err.reason == "UNKNOWN"
+end
+
+local function notify_ignored_player_error(err)
+  notify.warn("Spoil: Spotify ignored the playback command: " .. (err.msg or "HTTP 403"), { icon = "⚠" })
 end
 
 function M.is_authorized()
@@ -158,6 +165,7 @@ function M.next_track()
   api.next_track(nil, function(err)
     if err then
       if is_benign_player_error(err) then return end
+      if is_ambiguous_player_error(err) then return notify_ignored_player_error(err) end
       E.notify(err)
       return
     end
@@ -169,6 +177,7 @@ function M.previous_track()
   api.previous_track(nil, function(err)
     if err then
       if is_benign_player_error(err) then return end
+      if is_ambiguous_player_error(err) then return notify_ignored_player_error(err) end
       E.notify(err)
       return
     end
@@ -276,6 +285,7 @@ function M.play(opts)
           vim.defer_fn(M.notify_now_playing, 500)
           return
         end
+        if resume and is_ambiguous_player_error(err) then return notify_ignored_player_error(err) end
         E.notify(err)
         return
       end
@@ -291,6 +301,7 @@ function M.pause()
         notify.info("Paused", { icon = "⏸" })
         return
       end
+      if is_ambiguous_player_error(err) then return notify_ignored_player_error(err) end
       E.notify(err)
       return
     end

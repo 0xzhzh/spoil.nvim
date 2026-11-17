@@ -128,4 +128,62 @@ T["queues selected tracks"] = function()
   eq(r.selected.queued, { uri = "spotify:track:xyz" })
 end
 
+T["surfaces ambiguous playback 403s"] = function()
+  local r = child.lua_get([[(function()
+    local api = require("spoil.api")
+    local user = require("spoil.user_api")
+    local notify = require("spoil.notify")
+    local messages = {}
+    notify.backend = function(msg, level) messages[#messages + 1] = { msg = msg, level = level } end
+    local function last() return messages[#messages] end
+
+    api.next_track = function(_, cb)
+      cb({ status = 403, reason = "UNKNOWN", msg = "Player command failed: Restriction violated" })
+    end
+    user.next_track()
+    local next_unknown = last()
+
+    messages = {}
+    api.next_track = function(_, cb) cb({ status = 403, reason = "NO_NEXT_TRACK", msg = "no next" }) end
+    user.next_track()
+    local next_benign = last()
+
+    messages = {}
+    api.pause = function(_, cb) cb({ status = 403, reason = nil, msg = "Restriction violated" }) end
+    user.pause()
+    local pause_unknown = last()
+
+    messages = {}
+    api.pause = function(_, cb) cb({ status = 403, reason = "ALREADY_PAUSED", msg = "already paused" }) end
+    user.pause()
+    local pause_known = last()
+
+    messages = {}
+    api.next_track = function(_, cb) cb({ status = 403, reason = "PREMIUM_REQUIRED", msg = "Premium required" }) end
+    user.next_track()
+    local other = last()
+
+    return {
+      next_unknown = next_unknown,
+      next_benign = next_benign,
+      pause_unknown = pause_unknown,
+      pause_known = pause_known,
+      other = other,
+      WARN = vim.log.levels.WARN,
+      INFO = vim.log.levels.INFO,
+      ERROR = vim.log.levels.ERROR,
+    }
+  end)()]])
+
+  eq(r.next_unknown.msg, "Spoil: Spotify ignored the playback command: Player command failed: Restriction violated")
+  eq(r.next_unknown.level, r.WARN)
+  eq(r.next_benign, nil)
+  eq(r.pause_unknown.msg, "Spoil: Spotify ignored the playback command: Restriction violated")
+  eq(r.pause_unknown.level, r.WARN)
+  eq(r.pause_known.msg, "Paused")
+  eq(r.pause_known.level, r.INFO)
+  eq(r.other.msg, "Spoil: Premium required")
+  eq(r.other.level, r.ERROR)
+end
+
 return T
