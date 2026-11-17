@@ -154,6 +154,20 @@ function M.previous_track()
   end)
 end
 
+--- Device entries for `vim.ui.select`, annotated with the active device.
+local function device_items(devices)
+  local items = {}
+  for _, d in ipairs(devices) do
+    local active = d.is_active and ", active" or ""
+    table.insert(items, {
+      id = d.id,
+      name = d.name,
+      label = ("%s  (%s%s)"):format(d.name, d.type or "?", active),
+    })
+  end
+  return items
+end
+
 --- Resolve a device to play on. Calls cb(err) or cb(nil, device_id).
 --- If a device is already active, device_id is nil (Spotify uses the active one),
 --- so playback follows whatever device you last switched to.
@@ -171,17 +185,41 @@ function M.ensure_device(cb)
     if #devices == 1 then
       return cb(nil, devices[1].id)
     end
-    local items = {}
-    for _, d in ipairs(devices) do
-      table.insert(items, { id = d.id, label = d.name .. "  (" .. (d.type or "?") .. ")" })
-    end
-    vim.ui.select(items, {
+    vim.ui.select(device_items(devices), {
       prompt = "Select Spotify device",
       format_item = function(i) return i.label end,
     }, function(choice)
       if not choice then return cb(E.no_device_selected()) end
       cb(nil, choice.id)
     end)
+  end)
+end
+
+--- Prompt for a device and transfer playback to it.
+function M.select_device()
+  api.get_devices(nil, function(err, data)
+    if err then return E.notify(err) end
+    local devices = (data and data.devices) or {}
+    if #devices == 0 then return E.notify(E.no_devices()) end
+
+    local items = device_items(devices)
+    if #items == 1 then return M.transfer_to_device(items[1]) end
+
+    vim.ui.select(items, {
+      prompt = "Select Spotify device",
+      format_item = function(i) return i.label end,
+    }, function(choice)
+      if choice then M.transfer_to_device(choice) end
+    end)
+  end)
+end
+
+--- Transfer playback to a device without changing the playing/paused state.
+---@param device { id: string, name: string }
+function M.transfer_to_device(device)
+  api.transfer_playback({ device_id = device.id, play = false }, function(err)
+    if err then return E.notify(err) end
+    notify.info("Playback transferred to " .. device.name, { icon = "🔀" })
   end)
 end
 

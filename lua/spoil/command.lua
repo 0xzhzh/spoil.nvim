@@ -39,6 +39,10 @@ local commands = {
     desc = "Go to the previous track",
     run = function() user_api.previous_track() end,
   },
+  device = {
+    desc = "Select and transfer to a playback device",
+    run = function() user_api.select_device() end,
+  },
   login = {
     desc = "Log in to Spotify",
     run = function() user_api.login() end,
