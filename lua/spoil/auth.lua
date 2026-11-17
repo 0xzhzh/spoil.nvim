@@ -152,7 +152,8 @@ local function do_auth(client_id, open_browser, clipboard)
     if not ok then
       return E.notify(err)
     end
-    state.save_tokens(tokens)
+    local saved, save_err = state.save_tokens(tokens)
+    if not saved then return E.notify(E.storage_failed("Spotify tokens", save_err)) end
     notify.info("Spoil: Authenticated successfully!")
   end
 
@@ -214,7 +215,8 @@ function M.auth(opts)
       notify.warn("Spoil: Auth cancelled")
       return
     end
-    state.save_credentials(input)
+    local saved, save_err = state.save_credentials(input)
+    if not saved then return E.notify(E.storage_failed("Spotify client ID", save_err)) end
     do_auth(input, open_browser, clipboard)
   end)
 end

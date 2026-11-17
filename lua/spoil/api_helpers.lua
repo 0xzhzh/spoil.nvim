@@ -70,7 +70,8 @@ local function refresh_access_token()
   end
 
   new_tokens.refresh_token = new_tokens.refresh_token or tokens.refresh_token
-  state.save_tokens(new_tokens)
+  local saved, save_err = state.save_tokens(new_tokens)
+  if not saved then return nil, E.storage_failed("refreshed Spotify tokens", save_err) end
   return new_tokens.access_token
 end
 
@@ -180,10 +181,11 @@ local function request_async(method, session, url, data, cb, http_opts)
             end
             return cb(err, nil)
           end
+          nt.refresh_token = nt.refresh_token or session.refresh_token
+          local saved, save_err = state.save_tokens(nt)
+          if not saved then return cb(E.storage_failed("refreshed Spotify tokens", save_err), nil) end
           session.access_token = nt.access_token
-          session.refresh_token = nt.refresh_token or session.refresh_token
-          nt.refresh_token = session.refresh_token
-          state.save_tokens(nt)
+          session.refresh_token = nt.refresh_token
           opts.headers.Authorization = "Bearer " .. session.access_token
           run(true)
         end)

@@ -26,6 +26,7 @@ M.messages = {
   unknown_command = "Unknown command '%s'",
   token_exchange_failed = "Token exchange failed (HTTP %s)",
   transport_failed = "curl failed (exit %s)",
+  storage_failed = "Failed to save %s: %s",
 }
 
 ---@class spoil.Error
@@ -101,6 +102,13 @@ end
 ---@return spoil.Error
 function M.transport_failed(exit_code)
   return M.new(string.format(M.messages.transport_failed, tostring(exit_code)), { status = 0 })
+end
+
+---@param what string
+---@param detail string
+---@return spoil.Error
+function M.storage_failed(what, detail)
+  return M.new(string.format(M.messages.storage_failed, what, tostring(detail)), { status = 0 })
 end
 
 ---@param status integer

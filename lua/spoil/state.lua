@@ -14,7 +14,8 @@ end
 local function ensure_data_dir()
   local dir = data_dir()
   if vim.fn.isdirectory(dir) == 0 then
-    vim.fn.mkdir(dir, "p", private_dir_mode)
+    local ok, err = pcall(vim.fn.mkdir, dir, "p", private_dir_mode)
+    if not ok then return nil, tostring(err) end
   end
   return dir
 end
@@ -22,28 +23,32 @@ end
 --- Write a file readable only by the current user (0600).
 --- Opens with `0600` so a newly created file is never briefly world-readable,
 --- then chmods to tighten files left behind by older versions.
+---@return boolean|nil ok
+---@return string|nil err
 local function write_private(path, contents)
   local fd, open_err = vim.uv.fs_open(path, "w", private_file_mode)
   if not fd then
-    error(("failed to open %s for writing: %s"):format(path, open_err))
+    return nil, ("failed to open %s for writing: %s"):format(path, open_err)
   end
 
   local offset = 0
   while offset < #contents do
     local written, write_err = vim.uv.fs_write(fd, contents, offset)
-    if not written then
+    if not written or written == 0 then
       vim.uv.fs_close(fd)
-      error(("failed to write %s: %s"):format(path, write_err))
+      pcall(vim.uv.fs_unlink, path)
+      return nil, ("failed to write %s: %s"):format(path, write_err or "no progress")
     end
     offset = offset + written
   end
   vim.uv.fs_close(fd)
 
   pcall(vim.uv.fs_chmod, path, private_file_mode)
+  return true
 end
 
 local function write_json(path, value)
-  write_private(path, vim.fn.json_encode(value) .. "\n")
+  return write_private(path, vim.fn.json_encode(value) .. "\n")
 end
 
 function M.load_credentials()
@@ -60,8 +65,9 @@ function M.load_credentials()
 end
 
 function M.save_credentials(client_id)
-  ensure_data_dir()
-  write_json(data_dir("credentials.json"), { client_id = client_id })
+  local dir, dir_err = ensure_data_dir()
+  if not dir then return nil, dir_err end
+  return write_json(data_dir("credentials.json"), { client_id = client_id })
 end
 
 function M.load_tokens()
@@ -78,8 +84,9 @@ function M.load_tokens()
 end
 
 function M.save_tokens(tokens)
-  ensure_data_dir()
-  write_json(data_dir("tokens.json"), tokens)
+  local dir, dir_err = ensure_data_dir()
+  if not dir then return nil, dir_err end
+  return write_json(data_dir("tokens.json"), tokens)
 end
 
 function M.is_authorized()

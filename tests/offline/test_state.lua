@@ -50,4 +50,37 @@ T["writes private JSON files"] = function()
   eq(r.creds_after_clear, nil)
 end
 
+T["reports write failures instead of raising"] = function()
+  local r = child.lua_get([[(function()
+    local state = require("spoil.state")
+    local uv = vim.uv
+    local real_open, real_write = uv.fs_open, uv.fs_write
+
+    uv.fs_open = function() return nil, "denied" end
+    local open_ok, open_err = state.save_tokens({ access_token = "a" })
+    uv.fs_open = real_open
+
+    uv.fs_write = function() return 0 end
+    local write_ok, write_err = state.save_tokens({ access_token = "a" })
+    uv.fs_write = real_write
+
+    local success = state.save_tokens({ access_token = "b" })
+    return {
+      open_ok = open_ok,
+      open_err = open_err,
+      write_ok = write_ok,
+      write_err = write_err,
+      success = success,
+      loaded = state.load_tokens(),
+    }
+  end)()]])
+
+  eq(r.open_ok, nil)
+  eq(r.open_err:find("denied", 1, true) ~= nil, true)
+  eq(r.write_ok, nil)
+  eq(r.write_err:find("no progress", 1, true) ~= nil, true)
+  eq(r.success, true)
+  eq(r.loaded, { access_token = "b" })
+end
+
 return T

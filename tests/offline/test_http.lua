@@ -38,7 +38,7 @@ T["refreshes tokens on 401"] = function()
 
     state.load_tokens = function() return { access_token = "old", refresh_token = "refresh" } end
     local saved, cleared
-    state.save_tokens = function(tokens) saved = tokens end
+    state.save_tokens = function(tokens) saved = tokens return true end
     state.clear_tokens = function() cleared = true end
 
     local calls = {}
@@ -202,6 +202,42 @@ T["returns parse errors from async writes"] = function()
     eq(r[method].err.msg, "Failed to parse the Spotify response")
     eq(r[method].data, nil)
   end
+end
+
+T["surfaces token save failures"] = function()
+  local r = child.lua_get([[(function()
+    local config = require("spoil.config")
+    local state = require("spoil.state")
+    local http = require("spoil.http")
+    config.options.auth.client_id = "cid"
+    state.load_tokens = function() return { access_token = "old", refresh_token = "r" } end
+    state.save_tokens = function() return nil, "disk full" end
+    local H = require("spoil.api_helpers")
+
+    http.set_transport(function(_, url)
+      if url:find("/api/token", 1, true) then
+        return { status = 200, body = vim.fn.json_encode({ access_token = "new" }) }
+      end
+      return { status = 401, body = "" }
+    end)
+    local sync = H.get("https://api.spotify.com/v1/me")
+
+    http.set_transport(function(_, url, opts)
+      if url:find("/api/token", 1, true) then
+        opts.callback({ status = 200, body = vim.fn.json_encode({ access_token = "new" }) })
+      else
+        opts.callback({ status = 401, body = "" })
+      end
+    end)
+    local async
+    H.get("https://api.spotify.com/v1/me", function(err) async = err end)
+    vim.wait(1000, function() return async ~= nil end)
+
+    return { sync = sync, async = async }
+  end)()]])
+
+  eq(r.sync.msg, "Failed to save refreshed Spotify tokens: disk full")
+  eq(r.async.msg, "Failed to save refreshed Spotify tokens: disk full")
 end
 
 return T
