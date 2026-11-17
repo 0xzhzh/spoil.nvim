@@ -89,14 +89,9 @@ local function parse(resp)
 end
 
 function M.add_query(url, params)
-  local parts = {}
-  for k, v in pairs(params) do
-    if v ~= nil then
-      table.insert(parts, k .. "=" .. vim.uri_encode(tostring(v)))
-    end
-  end
-  if #parts == 0 then return url end
-  return url .. "?" .. table.concat(parts, "&")
+  local query = http.encode_query(params)
+  if query == "" then return url end
+  return url .. "?" .. query
 end
 
 local function build_opts(token, data, http_opts)
@@ -264,44 +259,22 @@ function M.get(url, callback, http_opts)
   end
 end
 
-function M.post(url, data, callback)
+local function write(method, url, data, callback)
   local auth_err, tokens, cb = check(callback)
   if auth_err then return auth_err end
   if cb then
-    request_async("post", tokens, url, data, function(err, resp)
+    request_async(method, tokens, url, data, function(err, resp)
       if err then return cb(err, nil) end
       check_write_async(resp, cb)
     end)
   else
-    return check_write(request("post", tokens, url, data))
+    return check_write(request(method, tokens, url, data))
   end
 end
 
-function M.put(url, data, callback)
-  local auth_err, tokens, cb = check(callback)
-  if auth_err then return auth_err end
-  if cb then
-    request_async("put", tokens, url, data, function(err, resp)
-      if err then return cb(err, nil) end
-      check_write_async(resp, cb)
-    end)
-  else
-    return check_write(request("put", tokens, url, data))
-  end
-end
-
-function M.del(url, data, callback)
-  local auth_err, tokens, cb = check(callback)
-  if auth_err then return auth_err end
-  if cb then
-    request_async("delete", tokens, url, data, function(err, resp)
-      if err then return cb(err, nil) end
-      check_write_async(resp, cb)
-    end)
-  else
-    return check_write(request("delete", tokens, url, data))
-  end
-end
+function M.post(url, data, callback) return write("post", url, data, callback) end
+function M.put(url, data, callback) return write("put", url, data, callback) end
+function M.del(url, data, callback) return write("delete", url, data, callback) end
 
 function M.paginate(url, callback)
   local auth_err, tokens, cb = check(callback)

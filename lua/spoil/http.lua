@@ -15,12 +15,18 @@ local STATUS_MARKER = "__SPOIL_STATUS__"
 ---@field connect_timeout? integer
 ---@alias spoil.HttpTransport fun(method: string, url: string, opts: spoil.HttpOpts): spoil.HttpResponse?
 
-function M.encode_form(params)
+function M.encode_query(params)
   local parts = {}
   for k, v in pairs(params) do
-    table.insert(parts, k .. "=" .. vim.uri_encode(tostring(v)))
+    if v ~= nil then
+      table.insert(parts, k .. "=" .. vim.uri_encode(tostring(v)))
+    end
   end
   return table.concat(parts, "&")
+end
+
+function M.encode_form(params)
+  return M.encode_query(params)
 end
 
 local function build_curl(method, url, opts)

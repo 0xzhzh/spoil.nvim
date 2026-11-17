@@ -1,4 +1,5 @@
 --- OAuth helpers: authorize URL construction and the local callback server.
+local http = require("spoil.http")
 local M = {}
 
 ---@param port integer
@@ -10,11 +11,7 @@ end
 ---@param params table<string, string>
 ---@return string
 function M.authorize_url(params)
-  local qs = {}
-  for k, v in pairs(params) do
-    table.insert(qs, k .. "=" .. vim.uri_encode(tostring(v)))
-  end
-  return "https://accounts.spotify.com/authorize?" .. table.concat(qs, "&")
+  return "https://accounts.spotify.com/authorize?" .. http.encode_query(params)
 end
 
 local function parse_query(target)

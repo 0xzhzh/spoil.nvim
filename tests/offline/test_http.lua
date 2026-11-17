@@ -29,6 +29,57 @@ T["uses the injected transport"] = function()
   eq(r.seen_async, { method = "POST", url = "https://example.test/y" })
 end
 
+T["shares query encoding"] = function()
+  local r = child.lua_get([[(function()
+    local http = require("spoil.http")
+    local H = require("spoil.api_helpers")
+    return {
+      form = http.encode_form({ q = "a b" }),
+      query = http.encode_query({ q = "a b", skipped = nil }),
+      url = H.add_query("https://example.test", { q = "a b", skipped = nil }),
+      empty = H.add_query("https://example.test", { skipped = nil }),
+      oauth = require("spoil.oauth").authorize_url({ q = "a b", skipped = nil }),
+    }
+  end)()]])
+
+  eq(r.form, "q=a%20b")
+  eq(r.query, "q=a%20b")
+  eq(r.url, "https://example.test?q=a%20b")
+  eq(r.empty, "https://example.test")
+  eq(r.oauth, "https://accounts.spotify.com/authorize?q=a%20b")
+end
+
+T["dispatches write helpers by HTTP method"] = function()
+  local r = child.lua_get([=[(function()
+    local state = require("spoil.state")
+    local http = require("spoil.http")
+    state.load_tokens = function() return { access_token = "t" } end
+    local H = require("spoil.api_helpers")
+    local seen = {}
+
+    local function transport(method)
+      return function(_, _, opts)
+        table.insert(seen, method)
+        local resp = { status = 204, body = "" }
+        if opts.callback then opts.callback(resp) end
+        return resp
+      end
+    end
+
+    for _, case in ipairs({ { "post", "POST" }, { "put", "PUT" }, { "del", "DELETE" } }) do
+      http.set_transport(transport(case[2]))
+      H[case[1]]("https://api.spotify.com/sync")
+      local async
+      H[case[1]]("https://api.spotify.com/async", {}, function(err, data) async = { err = err, data = data } end)
+      vim.wait(1000, function() return async ~= nil end)
+    end
+
+    return seen
+  end)()]=])
+
+  eq(r, { "POST", "POST", "PUT", "PUT", "DELETE", "DELETE" })
+end
+
 T["refreshes tokens on 401"] = function()
   local r = child.lua_get([[(function()
     local config = require("spoil.config")
