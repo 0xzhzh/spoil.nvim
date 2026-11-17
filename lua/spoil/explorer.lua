@@ -3,6 +3,7 @@ local E = require("spoil.error")
 local views = {}
 local states = {}
 local cache = {}
+local saved_window_opts = {}
 
 function M.register_view(name, view)
   views[name] = view
@@ -161,13 +162,42 @@ load_view = function(buf, view)
   end)
 end
 
+local function save_window_opts(win)
+  if saved_window_opts[win] then return end
+  saved_window_opts[win] = {
+    cursorline = vim.wo[win].cursorline,
+    number = vim.wo[win].number,
+  }
+end
+
+local function restore_window_opts(win)
+  local saved = saved_window_opts[win]
+  if not saved then return end
+  saved_window_opts[win] = nil
+
+  if not vim.api.nvim_win_is_valid(win) then return end
+  vim.wo[win].cursorline = saved.cursorline
+  vim.wo[win].number = saved.number
+end
+
+local function maybe_restore_window_opts(win)
+  if not vim.api.nvim_win_is_valid(win) then
+    saved_window_opts[win] = nil
+    return
+  end
+  if not states[vim.api.nvim_win_get_buf(win)] then restore_window_opts(win) end
+end
+
 local function open_view(uri, view_name, context)
+  local win = vim.api.nvim_get_current_win()
+  save_window_opts(win)
+
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_set_current_buf(buf)
 
   vim.bo[buf].bufhidden = "wipe"
-  vim.wo.cursorline = true
-  vim.wo.number = false
+  vim.wo[win].cursorline = true
+  vim.wo[win].number = false
   vim.bo[buf].modifiable = false
   vim.api.nvim_buf_set_name(buf, uri)
 
@@ -186,7 +216,11 @@ local function open_view(uri, view_name, context)
   vim.api.nvim_create_autocmd("BufWipeout", {
     group = group,
     buffer = buf,
-    callback = function() states[buf] = nil end,
+    callback = function()
+      states[buf] = nil
+      -- Defer: navigation wipes the old view while opening a new one.
+      vim.schedule(function() maybe_restore_window_opts(win) end)
+    end,
   })
 
   local view = { name = view_name, items = {}, cursor = 1, context = context or {} }
