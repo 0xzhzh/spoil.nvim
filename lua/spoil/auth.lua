@@ -53,7 +53,78 @@ local function generate_code_challenge(verifier)
   return base64url_encode(digest)
 end
 
-local function start_callback_server(port, on_complete)
+--- Random opaque value echoed back by Spotify and checked on the callback to
+--- protect against CSRF / authorization-code injection.
+local function generate_oauth_state()
+  return base64url_encode(random_bytes(32))
+end
+
+local function parse_query(target)
+  local params = {}
+  local query = target:match("%?([^#]*)")
+  if not query then return params end
+  for pair in query:gmatch("[^&]+") do
+    local key, value = pair:match("^([^=]+)=?(.*)$")
+    if key then
+      params[vim.uri_decode(key)] = vim.uri_decode(value)
+    end
+  end
+  return params
+end
+
+--- Inspect a callback request. Returns nil while the request line is
+--- incomplete, otherwise `{ code = ... }` on success or `{ error = ... }`.
+local function evaluate_callback(request, expected_state)
+  local target = request:match("^%a+%s+(%S+)%s+HTTP/")
+  if not target then
+    if request:find("\r\n\r\n") then
+      return { error = "malformed callback request" }
+    end
+    return nil
+  end
+
+  local path = target:match("^[^?]*")
+  if path ~= "/callback" then
+    return { error = "unexpected callback path: " .. path }
+  end
+
+  local params = parse_query(target)
+  if not params.code or params.code == "" then
+    if request:find("\r\n\r\n") then
+      return { error = "no authorization code in callback" }
+    end
+    return nil
+  end
+
+  if params.state ~= expected_state then
+    return { error = "OAuth state mismatch (possible CSRF); authorization rejected" }
+  end
+
+  return { code = params.code }
+end
+
+local function escape_html(text)
+  return (tostring(text)
+    :gsub("&", "&amp;")
+    :gsub("<", "&lt;")
+    :gsub(">", "&gt;")
+    :gsub('"', "&quot;"))
+end
+
+local function send_response(client, status, title, message)
+  local body = ("<html><body><h1>%s</h1><p>%s</p></body></html>"):format(escape_html(title), escape_html(message))
+  local resp = ("HTTP/1.1 %s\r\nContent-Length: %d\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n%s"):format(
+    status,
+    #body,
+    body
+  )
+  client:write(resp, function()
+    client:shutdown()
+    client:close()
+  end)
+end
+
+local function start_callback_server(port, expected_state, on_complete)
   local loop = vim.loop
   local server = assert(loop.new_tcp(), "failed to create TCP handle")
 
@@ -70,31 +141,32 @@ local function start_callback_server(port, on_complete)
     server:accept(client)
 
     local chunks = {}
+    local finished = false
     client:read_start(function(read_err, data)
+      if finished then return end
+
       if read_err then
+        finished = true
         vim.schedule(function() on_complete({ error = "read error: " .. tostring(read_err) }) end)
         return
       end
 
-      if data then
-        table.insert(chunks, data)
-        local full = table.concat(chunks)
-        local code = full:match("code=([^%s&]+)")
-        if code then
-          local decoded = vim.uri_decode(code)
-          local body = "<html><body><h1>Authenticated!</h1><p>Return to Neovim.</p></body></html>"
-          local resp = ("HTTP/1.1 200 OK\r\nContent-Length: %d\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n%s"):format(#body, body)
-          client:write(resp, function() client:shutdown() client:close() end)
-          vim.schedule(function() on_complete({ code = decoded }) end)
-        elseif full:find("\r\n\r\n") then
-          local body = "<html><body><h1>Error</h1><p>No authorization code found.</p></body></html>"
-          local resp = ("HTTP/1.1 400 Bad Request\r\nContent-Length: %d\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n%s"):format(#body, body)
-          client:write(resp, function() client:shutdown() client:close() end)
-          vim.schedule(function() on_complete({ error = "no authorization code in callback" }) end)
-        end
-      else
+      if not data then
         client:close()
+        return
       end
+
+      table.insert(chunks, data)
+      local result = evaluate_callback(table.concat(chunks), expected_state)
+      if not result then return end
+
+      finished = true
+      if result.code then
+        send_response(client, "200 OK", "Authenticated!", "Return to Neovim.")
+      else
+        send_response(client, "400 Bad Request", "Authorization Error", result.error)
+      end
+      vim.schedule(function() on_complete(result) end)
     end)
   end)
 
@@ -174,11 +246,12 @@ local function do_auth(client_id, open_browser, clipboard)
   local port = config.options.auth.port
   local redirect_uri = ("http://127.0.0.1:%d/callback"):format(port)
 
-  -- Generate PKCE challenge
-  local verifier, challenge
+  -- Generate PKCE challenge and OAuth state
+  local verifier, challenge, oauth_state
   local ok, err = pcall(function()
     verifier = generate_code_verifier()
     challenge = generate_code_challenge(verifier)
+    oauth_state = generate_oauth_state()
   end)
   if not ok then
     return E.notify(err)
@@ -192,6 +265,7 @@ local function do_auth(client_id, open_browser, clipboard)
     code_challenge_method = "S256",
     code_challenge = challenge,
     scope = table.concat(config.options.auth.scopes, " "),
+    state = oauth_state,
   }
   local qs = {}
   for k, v in pairs(params) do
@@ -244,7 +318,7 @@ local function do_auth(client_id, open_browser, clipboard)
 
   -- Start callback server
   ok, err = pcall(function()
-    server = start_callback_server(port, on_complete)
+    server = start_callback_server(port, oauth_state, on_complete)
   end)
   if not ok then
     return E.notify(err)
