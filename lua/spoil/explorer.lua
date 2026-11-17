@@ -188,9 +188,40 @@ local function maybe_restore_window_opts(win)
   if not states[vim.api.nvim_win_get_buf(win)] then restore_window_opts(win) end
 end
 
+local window_group = vim.api.nvim_create_augroup("spoil_explorer_windows", { clear = true })
+
+vim.api.nvim_create_autocmd("BufEnter", {
+  group = window_group,
+  callback = function()
+    local win = vim.api.nvim_get_current_win()
+    if saved_window_opts[win] then
+      vim.schedule(function() maybe_restore_window_opts(win) end)
+    end
+  end,
+})
+
+vim.api.nvim_create_autocmd("WinClosed", {
+  group = window_group,
+  callback = function(args)
+    local win = tonumber(args.match)
+    if win then saved_window_opts[win] = nil end
+  end,
+})
+
 local function open_view(uri, view_name, context)
   local win = vim.api.nvim_get_current_win()
   save_window_opts(win)
+
+  -- Reuse an existing buffer for this URI instead of hitting E95.
+  local existing = vim.fn.bufnr(uri)
+  if existing ~= -1 and vim.api.nvim_buf_is_valid(existing) and states[existing] then
+    vim.api.nvim_set_current_buf(existing)
+    vim.wo[win].cursorline = true
+    vim.wo[win].number = false
+    local s = states[existing]
+    if #s.stack > 0 then load_view(existing, s.stack[#s.stack]) end
+    return
+  end
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_set_current_buf(buf)
@@ -199,7 +230,12 @@ local function open_view(uri, view_name, context)
   vim.wo[win].cursorline = true
   vim.wo[win].number = false
   vim.bo[buf].modifiable = false
-  vim.api.nvim_buf_set_name(buf, uri)
+  local named = pcall(vim.api.nvim_buf_set_name, buf, uri)
+  if not named then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    restore_window_opts(win)
+    return E.notify(E.new("Buffer already exists: " .. uri))
+  end
 
   local s = { stack = {}, _keymap_keys = nil, uri = uri }
   states[buf] = s
@@ -216,11 +252,7 @@ local function open_view(uri, view_name, context)
   vim.api.nvim_create_autocmd("BufWipeout", {
     group = group,
     buffer = buf,
-    callback = function()
-      states[buf] = nil
-      -- Defer: navigation wipes the old view while opening a new one.
-      vim.schedule(function() maybe_restore_window_opts(win) end)
-    end,
+    callback = function() states[buf] = nil end,
   })
 
   local view = { name = view_name, items = {}, cursor = 1, context = context or {} }
