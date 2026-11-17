@@ -5,6 +5,7 @@ local states = {}
 local buffers = {}
 local cache = {}
 local saved_window_opts = {}
+local extmark_ns = vim.api.nvim_create_namespace("spoil.explorer")
 
 function M.register_view(name, view)
   views[name] = view
@@ -88,14 +89,28 @@ local function render(buf, view)
   local vd = views[view.name]
   if not vd then return end
 
-  local lines = {}
-  for _, item in ipairs(view.items) do
-    table.insert(lines, vd.render(item))
+  local lines, highlights = {}, {}
+  if vd.format then
+    local formatted = vd.format(view.items)
+    lines = formatted.lines or {}
+    highlights = formatted.highlights or {}
+  else
+    for _, item in ipairs(view.items) do
+      table.insert(lines, vd.render(item))
+    end
   end
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
+
+  vim.api.nvim_buf_clear_namespace(buf, extmark_ns, 0, -1)
+  for _, mark in ipairs(highlights) do
+    vim.api.nvim_buf_set_extmark(buf, extmark_ns, mark.line, mark.start_col, {
+      end_col = mark.end_col,
+      hl_group = mark.hl,
+    })
+  end
 
   vim.bo[buf].filetype = vd.filetype
 

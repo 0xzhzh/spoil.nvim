@@ -8,7 +8,16 @@ T["reuses an existing buffer for the same URI"] = function()
     local api = require("spoil.api")
     api.my_playlists = function(_, cb)
       cb(nil, {
-        items = { { id = "p1", name = "Mix", uri = "spotify:playlist:p1", tracks = { total = 1 } } },
+        items = {
+          {
+            id = "p1",
+            name = "Mix",
+            uri = "spotify:playlist:p1",
+            public = false,
+            owner = { display_name = "alice" },
+            tracks = { total = 1 },
+          },
+        },
         total = 1,
       })
     end
@@ -63,7 +72,7 @@ T["reuses an existing buffer for the same URI"] = function()
 
   eq(r.reused.current_is_existing, true)
   eq(r.reused.count, 1)
-  eq(r.reused.lines, { "Mix  (1 tracks)" })
+  eq(r.reused.lines, { "Mix  1  private  alice" })
   eq(r.reused.window_opts, { cursorline = true, number = false })
   eq(r.b_restored, true)
   eq(r.a_while_b_leaves, { cursorline = true, number = false })
@@ -74,7 +83,16 @@ T["keeps buffers persistent and deduplicated by URI"] = function()
     local api = require("spoil.api")
     api.my_playlists = function(_, cb)
       cb(nil, {
-        items = { { id = "p1", name = "Mix", uri = "spotify:playlist:p1", tracks = { total = 1 } } },
+        items = {
+          {
+            id = "p1",
+            name = "Mix",
+            uri = "spotify:playlist:p1",
+            public = false,
+            owner = { display_name = "alice" },
+            tracks = { total = 1 },
+          },
+        },
         total = 1,
       })
     end
@@ -123,7 +141,16 @@ T["opens spoil URIs with :edit"] = function()
     local api = require("spoil.api")
     api.my_playlists = function(_, cb)
       cb(nil, {
-        items = { { id = "p1", name = "Mix", uri = "spotify:playlist:p1", tracks = { total = 1 } } },
+        items = {
+          {
+            id = "p1",
+            name = "Mix",
+            uri = "spotify:playlist:p1",
+            public = false,
+            owner = { display_name = "alice" },
+            tracks = { total = 1 },
+          },
+        },
         total = 1,
       })
     end
@@ -171,7 +198,7 @@ T["opens spoil URIs with :edit"] = function()
     return { playlists = playlists, tracks = tracks, reused = reused, count = count }
   end)()]])
 
-  eq(r.playlists, { name = "spoil://playlist", filetype = "spoil-playlists", lines = { "Mix  (1 tracks)" } })
+  eq(r.playlists, { name = "spoil://playlist", filetype = "spoil-playlists", lines = { "Mix  1  private  alice" } })
   eq(r.tracks, { name = "spoil://playlist/p1", filetype = "spoil-tracks", lines = { "Song  Artist  (Album)" } })
   eq(r.reused, true)
   eq(r.count, 2)

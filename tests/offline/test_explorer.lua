@@ -13,7 +13,16 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
     end
     api.my_playlists = function(_, cb)
       cb(nil, {
-        items = { { id = "p1", name = "Mix", uri = "spotify:playlist:p1", tracks = { total = 2 } } },
+        items = {
+          {
+            id = "p1",
+            name = "Mix",
+            uri = "spotify:playlist:p1",
+            public = false,
+            owner = { display_name = "alice" },
+            tracks = { total = 2 },
+          },
+        },
         total = 1,
       })
     end
@@ -36,11 +45,17 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
     local explorer = require("spoil.explorer")
     explorer.open_playlists()
     local playlists_buf = vim.api.nvim_get_current_buf()
+    local ns = vim.api.nvim_get_namespaces()["spoil.explorer"]
+    local groups = {}
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(playlists_buf, ns, 0, -1, { details = true })) do
+      groups[#groups + 1] = mark[4].hl_group
+    end
     local playlists = {
       name = vim.api.nvim_buf_get_name(playlists_buf),
       filetype = vim.bo[playlists_buf].filetype,
       lines = vim.api.nvim_buf_get_lines(playlists_buf, 0, -1, false),
       selected = explorer.get_selected_playlist(),
+      highlights = groups,
     }
 
     explorer.open_playlist("p1")
@@ -61,9 +76,15 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
 
   eq(r.playlists.name, "spoil://playlist")
   eq(r.playlists.filetype, "spoil-playlists")
-  eq(r.playlists.lines, { "Mix  (2 tracks)" })
+  eq(r.playlists.lines, { "Mix  2  private  alice" })
   eq(r.playlists.selected.id, "p1")
   eq(r.playlists.selected.name, "Mix")
+  eq(r.playlists.highlights, {
+    "SpoilPlaylistName",
+    "SpoilPlaylistCount",
+    "SpoilPlaylistVisibility",
+    "SpoilPlaylistOwner",
+  })
 
   eq(r.tracks.name, "spoil://playlist/p1")
   eq(r.tracks.filetype, "spoil-tracks")
@@ -73,19 +94,22 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
   eq(r.queued, { uri = "spotify:track:1" })
 end
 
-T["renders playlist counts from items or tracks"] = function()
+T["renders playlist counts and metadata"] = function()
   local r = child.lua_get([[(function()
     local playlists = require("spoil.explorer.playlists")
+    local function render(item)
+      return playlists.format({ item }).lines[1]
+    end
     return {
-      items = playlists.render({ name = "Items", items = { total = 3 } }),
-      tracks = playlists.render({ name = "Tracks", tracks = { total = 4 } }),
-      missing = playlists.render({ name = "Missing" }),
+      items = render({ name = "Items", items = { total = 3 }, public = true, owner = { display_name = "me" } }),
+      tracks = render({ name = "Tracks", tracks = { total = 4 }, public = false, owner = { display_name = "you" } }),
+      missing = render({ name = "Missing" }),
     }
   end)()]])
 
-  eq(r.items, "Items  (3 tracks)")
-  eq(r.tracks, "Tracks  (4 tracks)")
-  eq(r.missing, "Missing  (? tracks)")
+  eq(r.items, "Items  3  public  me")
+  eq(r.tracks, "Tracks  4  private  you")
+  eq(r.missing, "Missing  ?  ?  ?")
 end
 
 T["background re-render leaves other windows' cursors alone"] = function()
