@@ -22,6 +22,28 @@ local function current_view()
   return s.stack[#s.stack]
 end
 
+--- Find the Spoil view to read a selection from. Prefer the current buffer; if
+--- invoked from elsewhere, use the only visible Spoil view (None if ambiguous).
+local function visible_spoil_buf()
+  local current = vim.api.nvim_get_current_buf()
+  if states[current] then return current end
+
+  local found
+  for buf in pairs(states) do
+    if vim.api.nvim_buf_is_valid(buf) and #vim.fn.win_findbuf(buf) > 0 then
+      if found then return nil end
+      found = buf
+    end
+  end
+  return found
+end
+
+local function window_for_buffer(buf)
+  local current = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_buf(current) == buf then return current end
+  return vim.fn.win_findbuf(buf)[1]
+end
+
 local load_view
 
 local function cache_key(name, ctx)
@@ -302,11 +324,15 @@ function M.open()
 end
 
 function M.get_selected_item()
-  local s = get_state()
+  local buf = visible_spoil_buf()
+  local s = buf and states[buf]
   if not s or not s.stack or #s.stack == 0 then return nil end
   local v = s.stack[#s.stack]
   if not v or not v.items or type(v.items) ~= "table" or #v.items == 0 then return nil end
-  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, 0)
+
+  local win = window_for_buffer(buf)
+  if not win then return nil end
+  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, win)
   local idx = (ok and cursor and cursor[1]) or v.cursor or 1
   if type(idx) ~= "number" or idx < 1 then idx = 1 end
   if idx > #v.items then idx = #v.items end
