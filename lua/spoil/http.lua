@@ -6,7 +6,12 @@ local DEFAULT_CONNECT_TIMEOUT = 5
 local DEFAULT_TIMEOUT = 10
 
 ---@alias spoil.HttpResponse { status: integer, body: string, exit_code?: integer }
----@alias spoil.HttpOpts { headers?: table<string, string>, body?: string, callback?: fun(resp: spoil.HttpResponse), timeout?: integer, connect_timeout?: integer }
+---@class spoil.HttpOpts
+---@field headers? table<string, string>
+---@field body? string
+---@field callback? fun(resp: spoil.HttpResponse)
+---@field timeout? integer
+---@field connect_timeout? integer
 ---@alias spoil.HttpTransport fun(method: string, url: string, opts: spoil.HttpOpts): spoil.HttpResponse?
 
 function M.encode_form(params)

@@ -275,8 +275,15 @@ function M.remove_from_playlist(opts, callback)
   )
 end
 
+---@class spoil.ReorderPlaylistOpts
+---@field playlist_id string
+---@field range_start integer
+---@field insert_before integer
+---@field range_length? integer
+---@field snapshot_id? string
+
 --- Reorder items in a playlist.
----@param opts { playlist_id: string, range_start: integer, insert_before: integer, range_length?: integer, snapshot_id?: string }
+---@param opts spoil.ReorderPlaylistOpts
 ---@param callback? spoil.Callback
 ---@return table|spoil.Error
 function M.reorder_playlist_items(opts, callback)
