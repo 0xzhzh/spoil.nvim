@@ -59,7 +59,7 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
     return { playlists = playlists, tracks = tracks, has_a = keys["a"] ~= nil, queued = queued }
   end)()]==])
 
-  eq(r.playlists.name, "spoil://playlists")
+  eq(r.playlists.name, "spoil://playlist")
   eq(r.playlists.filetype, "spoil-playlists")
   eq(r.playlists.lines, { "Mix  (2 tracks)" })
   eq(r.playlists.selected.id, "p1")
@@ -114,7 +114,7 @@ T["background re-render leaves other windows' cursors alone"] = function()
       total = 2,
     })
 
-    local playlists_buf = vim.fn.bufnr("spoil://playlists")
+    local playlists_buf = vim.fn.bufnr("spoil://playlist")
     local spoil_wins = vim.fn.win_findbuf(playlists_buf)
     return {
       file_line = vim.api.nvim_win_get_cursor(file_win)[1],

@@ -39,7 +39,7 @@ T["reuses an existing buffer for the same URI"] = function()
       count = (function()
         local n = 0
         for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-          if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_name(buf) == "spoil://playlists" then n = n + 1 end
+          if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_get_name(buf) == "spoil://playlist" then n = n + 1 end
         end
         return n
       end)(),
@@ -101,7 +101,7 @@ T["keeps buffers persistent and deduplicated by URI"] = function()
     local count = 0
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       local name = vim.api.nvim_buf_get_name(buf)
-      if name == "spoil://playlists" or name == "spoil://playlist/p1" then count = count + 1 end
+      if name == "spoil://playlist" or name == "spoil://playlist/p1" then count = count + 1 end
     end
 
     return {
@@ -144,7 +144,7 @@ T["opens spoil URIs with :edit"] = function()
     end
 
     require("spoil.explorer")
-    vim.cmd("edit spoil://playlists")
+    vim.cmd("edit spoil://playlist")
     local playlists_buf = vim.api.nvim_get_current_buf()
     local playlists = {
       name = vim.api.nvim_buf_get_name(playlists_buf),
@@ -160,18 +160,18 @@ T["opens spoil URIs with :edit"] = function()
       lines = vim.api.nvim_buf_get_lines(tracks_buf, 0, -1, false),
     }
 
-    vim.cmd("edit spoil://playlists")
+    vim.cmd("edit spoil://playlist")
     local reused = vim.api.nvim_get_current_buf() == playlists_buf
     local count = 0
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       local name = vim.api.nvim_buf_get_name(buf)
-      if name == "spoil://playlists" or name == "spoil://playlist/p1" then count = count + 1 end
+      if name == "spoil://playlist" or name == "spoil://playlist/p1" then count = count + 1 end
     end
 
     return { playlists = playlists, tracks = tracks, reused = reused, count = count }
   end)()]])
 
-  eq(r.playlists, { name = "spoil://playlists", filetype = "spoil-playlists", lines = { "Mix  (1 tracks)" } })
+  eq(r.playlists, { name = "spoil://playlist", filetype = "spoil-playlists", lines = { "Mix  (1 tracks)" } })
   eq(r.tracks, { name = "spoil://playlist/p1", filetype = "spoil-tracks", lines = { "Song  Artist  (Album)" } })
   eq(r.reused, true)
   eq(r.count, 2)

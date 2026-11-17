@@ -44,12 +44,19 @@ local function window_for_buffer(buf)
   return vim.fn.win_findbuf(buf)[1]
 end
 
+local function buf_for_uri(uri)
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_get_name(buf) == uri then return buf end
+  end
+  return -1
+end
+
 local load_view
 local open_view
 
 local function spec_for_uri(uri)
   local path = uri:match("^spoil://(.+)$")
-  if path == "playlists" then
+  if path == "playlist" then
     return { name = "playlists", context = {} }
   end
   local id = path and path:match("^playlist/([^?]+)")
@@ -59,6 +66,7 @@ local function spec_for_uri(uri)
 end
 
 local function uri_for(name, context)
+  if name == "playlists" then return "spoil://playlist" end
   if name == "tracks" then
     local id = context and context.playlist_id
     if not id then return nil end
@@ -327,7 +335,7 @@ open_view = function(uri, view_name, context, parent_uri)
     existing = nil
   end
   if not existing then
-    local named = vim.fn.bufnr(uri)
+    local named = buf_for_uri(uri)
     if named ~= -1 and vim.api.nvim_buf_is_valid(named) then existing = named end
   end
 
@@ -396,7 +404,7 @@ vim.api.nvim_create_autocmd({ "BufReadCmd", "BufNewFile" }, {
 })
 
 function M.open_playlists()
-  open_view("spoil://playlists", "playlists", {})
+  open_view("spoil://playlist", "playlists", {})
 end
 
 function M.open_playlist(id)

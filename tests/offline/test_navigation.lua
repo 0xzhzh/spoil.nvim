@@ -75,7 +75,7 @@ T["playlists push and pop the tracks view"] = function()
       return { before = before, cursor_before = cursor_before, pushed = pushed, popped = popped }
     end)()]]):format(stub_api, key_callback))
 
-  eq(r.before, { name = "spoil://playlists", filetype = "spoil-playlists" })
+  eq(r.before, { name = "spoil://playlist", filetype = "spoil-playlists" })
   eq(r.cursor_before, 2)
   eq(r.pushed.same_buf, false)
   eq(r.pushed.name, "spoil://playlist/p2")
@@ -83,7 +83,7 @@ T["playlists push and pop the tracks view"] = function()
   eq(r.pushed.track.uri, "spotify:track:p2")
   eq(r.pushed.lines, { "Song p2  Artist  (Album)" })
   eq(r.popped.same_buf, true)
-  eq(r.popped.name, "spoil://playlists")
+  eq(r.popped.name, "spoil://playlist")
   eq(r.popped.filetype, "spoil-playlists")
   eq(r.popped.cursor, 2)
   eq(r.popped.playlist.id, "p2")
@@ -100,7 +100,7 @@ T["back from a directly opened playlist falls back to playlists"] = function()
       return { name = vim.api.nvim_buf_get_name(0), filetype = vim.bo.filetype }
     end)()]]):format(stub_api, key_callback))
 
-  eq(r.name, "spoil://playlists")
+  eq(r.name, "spoil://playlist")
   eq(r.filetype, "spoil-playlists")
 end
 
