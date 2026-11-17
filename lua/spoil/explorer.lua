@@ -109,7 +109,10 @@ local function apply_keymaps(buf, view)
     push_view = function(name, c)
       local s2 = get_state()
       if not s2 then return end
-      if not views[name] then return E.notify(E.unknown_view(name)) end
+      if not views[name] then
+        E.notify(E.unknown_view(name))
+        return
+      end
 
       c = c or {}
       if name == "tracks" then
@@ -118,7 +121,10 @@ local function apply_keymaps(buf, view)
           local p = M.get_selected_playlist()
           if p then pid = p.id end
         end
-        if not pid then return E.notify(E.no_playlist_selected()) end
+        if not pid then
+          E.notify(E.no_playlist_selected())
+          return
+        end
         c = vim.tbl_extend("force", c, { playlist_id = pid })
       end
 
@@ -278,7 +284,8 @@ local function open_view(uri, view_name, context)
   if not named then
     pcall(vim.api.nvim_buf_delete, buf, { force = true })
     restore_window_opts(win)
-    return E.notify(E.new("Buffer already exists: " .. uri))
+    E.notify(E.new("Buffer already exists: " .. uri))
+    return
   end
 
   local s = { stack = {}, _keymap_keys = nil, uri = uri }

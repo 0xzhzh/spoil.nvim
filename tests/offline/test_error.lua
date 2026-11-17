@@ -44,15 +44,24 @@ T["notifies with prefix and level"] = function()
     local E = require("spoil.error")
     local notify = require("spoil.notify")
     local captured
-    notify.backend = function(msg, level, opts) captured = { msg = msg, level = level, group = opts.group } end
+    notify.backend = function(msg, level, opts)
+      captured = { msg = msg, level = level, group = opts.group }
+      return "sent"
+    end
 
-    E.notify(E.rate_limited())
+    local returned = E.notify(E.rate_limited())
     local warn = captured
     E.notify("boom")
     local error = captured
     E.notify(nil)
 
-    return { warn = warn, error = error, WARN = vim.log.levels.WARN, ERROR = vim.log.levels.ERROR }
+    return {
+      warn = warn,
+      error = error,
+      returned = returned,
+      WARN = vim.log.levels.WARN,
+      ERROR = vim.log.levels.ERROR,
+    }
   end)()]])
 
   eq(r.warn.msg, "Spoil: Rate limited by Spotify; try again shortly")
@@ -60,6 +69,7 @@ T["notifies with prefix and level"] = function()
   eq(r.warn.group, "spoil.nvim")
   eq(r.error.msg, "Spoil: boom")
   eq(r.error.level, r.ERROR)
+  eq(r.returned, nil)
 end
 
 return T

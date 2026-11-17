@@ -100,7 +100,8 @@ local function do_auth(client_id, open_browser, clipboard)
     oauth_state = pkce.oauth_state()
   end)
   if not ok then
-    return E.notify(err)
+    E.notify(err)
+    return
   end
 
   -- Build authorize URL
@@ -143,17 +144,22 @@ local function do_auth(client_id, open_browser, clipboard)
     done = true
     cleanup()
     if result.error then
-      return E.notify("Auth failed — " .. result.error)
+      E.notify("Auth failed — " .. result.error)
+      return
     end
     local tokens
     ok, err = pcall(function()
       tokens = exchange_code(result.code, verifier, redirect_uri, client_id)
     end)
     if not ok then
-      return E.notify(err)
+      E.notify(err)
+      return
     end
     local saved, save_err = state.save_tokens(tokens)
-    if not saved then return E.notify(E.storage_failed("Spotify tokens", save_err)) end
+    if not saved then
+      E.notify(E.storage_failed("Spotify tokens", save_err))
+      return
+    end
     notify.info("Spoil: Authenticated successfully!")
   end
 
@@ -162,7 +168,8 @@ local function do_auth(client_id, open_browser, clipboard)
     server = oauth.start_server(port, oauth_state, on_complete)
   end)
   if not ok then
-    return E.notify(err)
+    E.notify(err)
+    return
   end
 
   -- Show floating window (always — status indicator + cancel)
@@ -170,7 +177,8 @@ local function do_auth(client_id, open_browser, clipboard)
   win, buf, open_err = show_floating_window(url, cancel)
   if open_err then
     cleanup()
-    return E.notify(E.new("Could not open the authorization window: " .. open_err))
+    E.notify(E.new("Could not open the authorization window: " .. open_err))
+    return
   end
 
   if clipboard and not copied then
@@ -216,7 +224,10 @@ function M.auth(opts)
       return
     end
     local saved, save_err = state.save_credentials(input)
-    if not saved then return E.notify(E.storage_failed("Spotify client ID", save_err)) end
+    if not saved then
+      E.notify(E.storage_failed("Spotify client ID", save_err))
+      return
+    end
     do_auth(input, open_browser, clipboard)
   end)
 end

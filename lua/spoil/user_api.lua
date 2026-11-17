@@ -218,7 +218,10 @@ end
 ---@param uri string
 function M.add_to_queue(uri)
   api.add_to_queue({ uri = uri }, function(err)
-    if err then return E.notify(err) end
+    if err then
+      E.notify(err)
+      return
+    end
     notify.info("Added to queue", { icon = "➕" })
   end)
 end
@@ -226,7 +229,10 @@ end
 --- Add the track selected in a spoil view to the end of the playback queue.
 function M.queue_selected()
   local track = explorer.get_selected_track()
-  if not track then return E.notify(E.no_track_selected()) end
+  if not track then
+    E.notify(E.no_track_selected())
+    return
+  end
   M.add_to_queue(track.uri)
 end
 
@@ -274,9 +280,15 @@ end
 --- Prompt for a device and transfer playback to it.
 function M.select_device()
   api.get_devices(nil, function(err, data)
-    if err then return E.notify(err) end
+    if err then
+      E.notify(err)
+      return
+    end
     local devices = (data and data.devices) or {}
-    if #devices == 0 then return E.notify(E.no_devices()) end
+    if #devices == 0 then
+      E.notify(E.no_devices())
+      return
+    end
 
     local items = device_items(devices)
     if #items == 1 then return M.transfer_to_device(items[1]) end
@@ -294,7 +306,10 @@ end
 ---@param device { id: string, name: string }
 function M.transfer_to_device(device)
   api.transfer_playback({ device_id = device.id, play = false }, function(err)
-    if err then return E.notify(err) end
+    if err then
+      E.notify(err)
+      return
+    end
     notify.info("Playback transferred to " .. device.name, { icon = "🔀" })
   end)
 end

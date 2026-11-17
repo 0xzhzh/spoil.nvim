@@ -178,7 +178,7 @@ function M.notify(err, opts)
   if err == nil then return end
   local msg = type(err) == "table" and err.msg or tostring(err)
   if not msg or msg == "" then msg = M.messages.unknown end
-  return notify.notify("Spoil: " .. msg, M.level(err), opts)
+  notify.notify("Spoil: " .. msg, M.level(err), opts)
 end
 
 return M
