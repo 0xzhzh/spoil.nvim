@@ -61,8 +61,10 @@ end
 ---@param callback? spoil.Callback
 ---@return table|spoil.Error
 function M.get_recently_played(opts, callback)
-  return H.paginate(H.add_query("https://api.spotify.com/v1/me/player/recently-played", { limit = opts and opts.limit }),
-    callback)
+  return H.paginate(
+    H.add_query("https://api.spotify.com/v1/me/player/recently-played", { limit = opts and opts.limit }),
+    callback
+  )
 end
 
 --- Get the current user's playback queue.
@@ -79,8 +81,11 @@ end
 ---@return table|spoil.Error
 function M.transfer_playback(opts, callback)
   opts = opts or {}
-  return H.put("https://api.spotify.com/v1/me/player",
-    { device_ids = { opts.device_id }, play = opts.play ~= false }, callback)
+  return H.put(
+    "https://api.spotify.com/v1/me/player",
+    { device_ids = { opts.device_id }, play = opts.play ~= false },
+    callback
+  )
 end
 
 --- Start or resume playback. Pass context_uri, uris, offset, or position_ms in opts.
@@ -93,8 +98,11 @@ function M.play(opts, callback)
   for k, v in pairs(opts) do
     if k ~= "device_id" then body[k] = v end
   end
-  return H.put(H.add_query("https://api.spotify.com/v1/me/player/play", { device_id = opts.device_id }),
-    next(body) ~= nil and body or nil, callback)
+  return H.put(
+    H.add_query("https://api.spotify.com/v1/me/player/play", { device_id = opts.device_id }),
+    next(body) ~= nil and body or nil,
+    callback
+  )
 end
 
 --- Pause playback.
@@ -102,8 +110,11 @@ end
 ---@param callback? spoil.Callback
 ---@return table|spoil.Error
 function M.pause(opts, callback)
-  return H.put(H.add_query("https://api.spotify.com/v1/me/player/pause", { device_id = opts and opts.device_id }), nil,
-    callback)
+  return H.put(
+    H.add_query("https://api.spotify.com/v1/me/player/pause", { device_id = opts and opts.device_id }),
+    nil,
+    callback
+  )
 end
 
 --- Skip to the next track.
@@ -111,8 +122,11 @@ end
 ---@param callback? spoil.Callback
 ---@return table|spoil.Error
 function M.next_track(opts, callback)
-  return H.post(H.add_query("https://api.spotify.com/v1/me/player/next", { device_id = opts and opts.device_id }), nil,
-    callback)
+  return H.post(
+    H.add_query("https://api.spotify.com/v1/me/player/next", { device_id = opts and opts.device_id }),
+    nil,
+    callback
+  )
 end
 
 --- Skip to the previous track.
@@ -120,8 +134,11 @@ end
 ---@param callback? spoil.Callback
 ---@return table|spoil.Error
 function M.previous_track(opts, callback)
-  return H.post(H.add_query("https://api.spotify.com/v1/me/player/previous", { device_id = opts and opts.device_id }), nil,
-    callback)
+  return H.post(
+    H.add_query("https://api.spotify.com/v1/me/player/previous", { device_id = opts and opts.device_id }),
+    nil,
+    callback
+  )
 end
 
 --- Seek to a position in the current track.
@@ -130,8 +147,14 @@ end
 ---@return table|spoil.Error
 function M.seek(opts, callback)
   opts = opts or {}
-  return H.put(H.add_query("https://api.spotify.com/v1/me/player/seek",
-    { position_ms = opts.position_ms, device_id = opts.device_id }), nil, callback)
+  return H.put(
+    H.add_query(
+      "https://api.spotify.com/v1/me/player/seek",
+      { position_ms = opts.position_ms, device_id = opts.device_id }
+    ),
+    nil,
+    callback
+  )
 end
 
 --- Set the playback volume.
@@ -140,8 +163,14 @@ end
 ---@return table|spoil.Error
 function M.set_volume(opts, callback)
   opts = opts or {}
-  return H.put(H.add_query("https://api.spotify.com/v1/me/player/volume",
-    { volume_percent = opts.volume_percent, device_id = opts.device_id }), nil, callback)
+  return H.put(
+    H.add_query(
+      "https://api.spotify.com/v1/me/player/volume",
+      { volume_percent = opts.volume_percent, device_id = opts.device_id }
+    ),
+    nil,
+    callback
+  )
 end
 
 --- Toggle shuffle mode.
@@ -150,8 +179,11 @@ end
 ---@return table|spoil.Error
 function M.toggle_shuffle(opts, callback)
   opts = opts or {}
-  return H.put(H.add_query("https://api.spotify.com/v1/me/player/shuffle",
-    { state = opts.state, device_id = opts.device_id }), nil, callback)
+  return H.put(
+    H.add_query("https://api.spotify.com/v1/me/player/shuffle", { state = opts.state, device_id = opts.device_id }),
+    nil,
+    callback
+  )
 end
 
 --- Set the repeat mode.
@@ -160,8 +192,11 @@ end
 ---@return table|spoil.Error
 function M.set_repeat(opts, callback)
   opts = opts or {}
-  return H.put(H.add_query("https://api.spotify.com/v1/me/player/repeat",
-    { state = opts.state, device_id = opts.device_id }), nil, callback)
+  return H.put(
+    H.add_query("https://api.spotify.com/v1/me/player/repeat", { state = opts.state, device_id = opts.device_id }),
+    nil,
+    callback
+  )
 end
 
 --- Add a track to the playback queue.
@@ -170,8 +205,11 @@ end
 ---@return table|spoil.Error
 function M.add_to_queue(opts, callback)
   opts = opts or {}
-  return H.post(H.add_query("https://api.spotify.com/v1/me/player/queue",
-    { uri = opts.uri, device_id = opts.device_id }), nil, callback)
+  return H.post(
+    H.add_query("https://api.spotify.com/v1/me/player/queue", { uri = opts.uri, device_id = opts.device_id }),
+    nil,
+    callback
+  )
 end
 
 --- Create a new playlist for the current user.
@@ -213,8 +251,11 @@ end
 ---@return table|spoil.Error
 function M.add_to_playlist(opts, callback)
   opts = opts or {}
-  return H.post("https://api.spotify.com/v1/playlists/" .. opts.playlist_id .. "/items",
-    { uris = opts.uris, position = opts.position }, callback)
+  return H.post(
+    "https://api.spotify.com/v1/playlists/" .. opts.playlist_id .. "/items",
+    { uris = opts.uris, position = opts.position },
+    callback
+  )
 end
 
 --- Remove tracks from a playlist.
@@ -227,8 +268,11 @@ function M.remove_from_playlist(opts, callback)
   for _, uri in ipairs(opts.uris) do
     table.insert(tracks, { uri = uri })
   end
-  return H.del("https://api.spotify.com/v1/playlists/" .. opts.playlist_id .. "/items",
-    { tracks = tracks, snapshot_id = opts.snapshot_id }, callback)
+  return H.del(
+    "https://api.spotify.com/v1/playlists/" .. opts.playlist_id .. "/items",
+    { tracks = tracks, snapshot_id = opts.snapshot_id },
+    callback
+  )
 end
 
 --- Reorder items in a playlist.
@@ -258,9 +302,15 @@ end
 ---@return table|spoil.Error
 function M.search(opts, callback)
   opts = opts or {}
-  return H.get(H.add_query("https://api.spotify.com/v1/search", {
-    q = opts.query, type = opts.type, limit = opts.limit, offset = opts.offset,
-  }), callback)
+  return H.get(
+    H.add_query("https://api.spotify.com/v1/search", {
+      q = opts.query,
+      type = opts.type,
+      limit = opts.limit,
+      offset = opts.offset,
+    }),
+    callback
+  )
 end
 
 return M

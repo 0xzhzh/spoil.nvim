@@ -17,31 +17,49 @@ return {
     return track.name .. "  " .. artists .. "  (" .. (track.album and track.album.name or "?") .. ")"
   end,
   keymaps = {
-    { "o", function(view, ctx)
-      local track = track_of(ctx.selected_item() or {})
-      if not track then return end
-      if track.album and track.album.uri then
-        require("spoil").play_context(track.album.uri)
-      elseif track.uri then
+    {
+      "o",
+      function(view, ctx)
+        local track = track_of(ctx.selected_item() or {})
+        if not track then return end
+        if track.album and track.album.uri then
+          require("spoil").play_context(track.album.uri)
+        elseif track.uri then
+          require("spoil").play_track(track)
+        end
+      end,
+    },
+    {
+      "<CR>",
+      function(view, ctx)
+        local track = track_of(ctx.selected_item() or {})
+        if not track or not track.uri then return end
         require("spoil").play_track(track)
-      end
-    end },
-    { "<CR>", function(view, ctx)
-      local track = track_of(ctx.selected_item() or {})
-      if not track or not track.uri then return end
-      require("spoil").play_track(track)
-    end },
-    { "<BS>", function(view, ctx)
-      require("spoil.explorer").open_playlists()
-    end },
-    { "a", function(view, ctx)
-      require("spoil").queue_selected()
-    end },
-    { "r", function(view, ctx)
-      ctx.refresh()
-    end },
-    { "q", function(view, ctx)
-      ctx.close()
-    end },
+      end,
+    },
+    {
+      "<BS>",
+      function(view, ctx)
+        require("spoil.explorer").open_playlists()
+      end,
+    },
+    {
+      "a",
+      function(view, ctx)
+        require("spoil").queue_selected()
+      end,
+    },
+    {
+      "r",
+      function(view, ctx)
+        ctx.refresh()
+      end,
+    },
+    {
+      "q",
+      function(view, ctx)
+        ctx.close()
+      end,
+    },
   },
 }

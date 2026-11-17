@@ -16,21 +16,33 @@ return {
     return item.name .. "  (" .. count .. " tracks)"
   end,
   keymaps = {
-    { "<CR>", function(view, ctx)
-      local item = ctx.selected_item()
-      if not item then return end
-      require("spoil.explorer").open_playlist(item.id)
-    end },
-    { "o", function(view, ctx)
-      local item = ctx.selected_item()
-      if not item then return end
-      require("spoil").play_context(item.uri)
-    end },
-    { "r", function(view, ctx)
-      ctx.refresh()
-    end },
-    { "q", function(view, ctx)
-      ctx.close()
-    end },
+    {
+      "<CR>",
+      function(view, ctx)
+        local item = ctx.selected_item()
+        if not item then return end
+        require("spoil.explorer").open_playlist(item.id)
+      end,
+    },
+    {
+      "o",
+      function(view, ctx)
+        local item = ctx.selected_item()
+        if not item then return end
+        require("spoil").play_context(item.uri)
+      end,
+    },
+    {
+      "r",
+      function(view, ctx)
+        ctx.refresh()
+      end,
+    },
+    {
+      "q",
+      function(view, ctx)
+        ctx.close()
+      end,
+    },
   },
 }

@@ -74,7 +74,7 @@ end
 
 local function copy_to_clipboard(text)
   if vim.fn.has("clipboard") == 1 then
-    vim.fn.setreg('+', text)
+    vim.fn.setreg("+", text)
     vim.fn.setreg('"', text)
   end
 end

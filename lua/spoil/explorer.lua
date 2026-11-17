@@ -119,7 +119,13 @@ local function apply_keymaps(buf, view)
   for _, km in ipairs(vd.keymaps or {}) do
     local key = km[1]
     local fn = km[2]
-    pcall(vim.keymap.set, "n", key, function() fn(current_view(), ctx) end, { buffer = buf, silent = true, noremap = true })
+    pcall(
+      vim.keymap.set,
+      "n",
+      key,
+      function() fn(current_view(), ctx) end,
+      { buffer = buf, silent = true, noremap = true }
+    )
     table.insert(keys, key)
   end
 

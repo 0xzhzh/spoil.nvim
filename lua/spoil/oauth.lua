@@ -65,11 +65,7 @@ function M.evaluate_callback(request, expected_state)
 end
 
 local function escape_html(text)
-  return (tostring(text)
-    :gsub("&", "&amp;")
-    :gsub("<", "&lt;")
-    :gsub(">", "&gt;")
-    :gsub('"', "&quot;"))
+  return (tostring(text):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"):gsub('"', "&quot;"))
 end
 
 local function send_response(client, status, title, message)

@@ -21,10 +21,18 @@ local function build_curl(method, url, opts)
   opts = opts or {}
   local tmp = vim.fn.tempname()
   local cmd = {
-    "curl", "-s",
-    "--connect-timeout", tostring(opts.connect_timeout or DEFAULT_CONNECT_TIMEOUT),
-    "--max-time", tostring(opts.timeout or DEFAULT_TIMEOUT),
-    "-X", method, "-o", tmp, "-w", "%{http_code}",
+    "curl",
+    "-s",
+    "--connect-timeout",
+    tostring(opts.connect_timeout or DEFAULT_CONNECT_TIMEOUT),
+    "--max-time",
+    tostring(opts.timeout or DEFAULT_TIMEOUT),
+    "-X",
+    method,
+    "-o",
+    tmp,
+    "-w",
+    "%{http_code}",
   }
 
   for k, v in pairs(opts.headers or {}) do
@@ -66,9 +74,11 @@ local function curl_transport(method, url, opts)
       end,
       -- on_exit runs even when curl prints nothing, so the callback always fires.
       on_exit = function(_, code)
-        vim.schedule(function()
-          opts.callback({ status = status, body = read_tmp(tmp), exit_code = code })
-        end)
+        vim.schedule(
+          function()
+            opts.callback({ status = status, body = read_tmp(tmp), exit_code = code })
+          end
+        )
       end,
     })
   else

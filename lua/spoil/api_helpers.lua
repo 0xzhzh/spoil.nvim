@@ -305,7 +305,11 @@ function M.paginate(url, callback)
         if data.msg then return cb(data, nil) end
         collect(data)
         url = data.next ~= vim.NIL and data.next or nil
-        if url then fetch() else cb(nil, { items = all_items, total = total }) end
+        if url then
+          fetch()
+        else
+          cb(nil, { items = all_items, total = total })
+        end
       end)
     end
     fetch()

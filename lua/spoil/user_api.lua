@@ -100,24 +100,28 @@ function M.statusline()
   if not status_timer then
     status_timer = vim.uv.new_timer()
     assert(status_timer, "uv.new_timer() returned nil?")
-    status_timer:start(0, sl.interval, vim.schedule_wrap(function()
-      api.now_playing({ timeout = sl.timeout }, function(err, data)
-        if err then
-          if err.status == 401 then
-            status_timer:stop()
-            status_timer:close()
-            status_timer = nil
+    status_timer:start(
+      0,
+      sl.interval,
+      vim.schedule_wrap(function()
+        api.now_playing({ timeout = sl.timeout }, function(err, data)
+          if err then
+            if err.status == 401 then
+              status_timer:stop()
+              status_timer:close()
+              status_timer = nil
+            end
+            status_item = nil
+            return
           end
-          status_item = nil
-          return
-        end
-        if not data or not data.item then
-          status_item = nil
-          return
-        end
-        status_item = data.item
+          if not data or not data.item then
+            status_item = nil
+            return
+          end
+          status_item = data.item
+        end)
       end)
-    end))
+    )
   end
 
   return M.format_status(status_item)
