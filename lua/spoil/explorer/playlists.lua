@@ -7,11 +7,9 @@ return {
     return api.my_playlists(nil, cb)
   end,
   render = function(item)
-    local count = "?"
-    if type(item.tracks) == "table" and item.tracks.total then
-      count = item.tracks.total
-    end
-    return item.name .. "  (" .. count .. " tracks)"
+    local items = type(item.items) == "table" and item.items.total or nil
+    local tracks = type(item.tracks) == "table" and item.tracks.total or nil
+    return item.name .. "  (" .. (items or tracks or "?") .. " tracks)"
   end,
   keymaps = {
     {

@@ -73,6 +73,21 @@ T["renders playlists and tracks and queues from the tracks view"] = function()
   eq(r.queued, { uri = "spotify:track:1" })
 end
 
+T["renders playlist counts from items or tracks"] = function()
+  local r = child.lua_get([[(function()
+    local playlists = require("spoil.explorer.playlists")
+    return {
+      items = playlists.render({ name = "Items", items = { total = 3 } }),
+      tracks = playlists.render({ name = "Tracks", tracks = { total = 4 } }),
+      missing = playlists.render({ name = "Missing" }),
+    }
+  end)()]])
+
+  eq(r.items, "Items  (3 tracks)")
+  eq(r.tracks, "Tracks  (4 tracks)")
+  eq(r.missing, "Missing  (? tracks)")
+end
+
 T["background re-render leaves other windows' cursors alone"] = function()
   local r = child.lua_get([==[(function()
     local api = require("spoil.api")
