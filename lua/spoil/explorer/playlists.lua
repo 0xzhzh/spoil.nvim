@@ -17,11 +17,41 @@ local function owner(item)
   return item.owner and item.owner.display_name or "?"
 end
 
+local function has_owner_ids(items)
+  for _, item in ipairs(items) do
+    if item.owner and item.owner.id then return true end
+  end
+  return false
+end
+
+local function readable_playlists(items, user_id)
+  local readable = {}
+  for _, item in ipairs(items) do
+    local owner_id = item.owner and item.owner.id
+    if not owner_id or owner_id == user_id or item.collaborative then
+      readable[#readable + 1] = item
+    end
+  end
+  return readable
+end
+
 return {
   name = "playlists",
   filetype = "spoil-playlists",
   fetch = function(_ctx, cb)
-    return api.my_playlists(nil, cb)
+    api.my_playlists(nil, function(err, data)
+      if err then return cb(err) end
+      local items = data and data.items or {}
+      if not has_owner_ids(items) then return cb(nil, data) end
+
+      api.current_user(nil, function(user_err, me)
+        if user_err then return cb(user_err) end
+        if not me or not me.id then return cb(nil, data) end
+
+        local readable = readable_playlists(items, me.id)
+        cb(nil, { items = readable, total = #readable })
+      end)
+    end)
   end,
   format = function(items)
     local rows = {}

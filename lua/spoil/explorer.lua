@@ -232,7 +232,11 @@ load_view = function(buf, view)
 
   vd.fetch(view.context, function(err, data)
     if err then
-      E.notify(err)
+      if view.name == "tracks" and err.status == 403 then
+        E.notify(E.playlist_forbidden())
+      else
+        E.notify(err)
+      end
       return
     end
     local items = items_of(data)

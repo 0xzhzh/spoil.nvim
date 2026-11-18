@@ -138,6 +138,52 @@ T["renders track metadata and durations"] = function()
   eq(r.unavailable, "(unavailable)")
 end
 
+T["explains forbidden playlist reads"] = function()
+  local r = child.lua_get([[(function()
+    local api = require("spoil.api")
+    local notify = require("spoil.notify")
+    local messages = {}
+    notify.backend = function(msg, level) messages[#messages + 1] = { msg = msg, level = level } end
+    api.playlist_items = function(_, cb) cb({ status = 403, msg = "Forbidden" }) end
+
+    require("spoil.explorer").open_playlist("p1")
+    vim.wait(1000, function() return #messages > 0 end)
+    return {
+      message = messages[1],
+      expected = require("spoil.error").messages.playlist_forbidden,
+      ERROR = vim.log.levels.ERROR,
+    }
+  end)()]])
+
+  eq(r.message.msg, "Spoil: " .. r.expected)
+  eq(r.message.level, r.ERROR)
+end
+
+T["hides playlists that cannot be opened"] = function()
+  local r = child.lua_get([[(function()
+    local api = require("spoil.api")
+    api.current_user = function(_, cb) cb(nil, { id = "me" }) end
+    api.my_playlists = function(_, cb)
+      cb(nil, {
+        items = {
+          { id = "own", name = "Own", owner = { id = "me" }, tracks = { total = 1 } },
+          { id = "shared", name = "Shared", owner = { id = "other" }, collaborative = true, tracks = { total = 2 } },
+          { id = "other", name = "Other", owner = { id = "other" }, tracks = { total = 3 } },
+        },
+        total = 3,
+      })
+    end
+
+    require("spoil.explorer").open_playlists()
+    local buf = vim.api.nvim_get_current_buf()
+    return vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  end)()]])
+
+  eq(#r, 2)
+  eq(r[1]:find("Own", 1, true) ~= nil, true)
+  eq(r[2]:find("Shared", 1, true) ~= nil, true)
+end
+
 T["background re-render leaves other windows' cursors alone"] = function()
   local r = child.lua_get([==[(function()
     local api = require("spoil.api")

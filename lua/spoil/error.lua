@@ -27,6 +27,7 @@ M.messages = {
   token_exchange_failed = "Token exchange failed (HTTP %s)",
   transport_failed = "curl failed (exit %s)",
   storage_failed = "Failed to save %s: %s",
+  playlist_forbidden = "Spotify does not allow reading playlists you don't own or collaborate on",
 }
 
 ---@class spoil.Error
@@ -133,6 +134,11 @@ end
 ---@return spoil.Error
 function M.no_playlist_selected()
   return M.new(M.messages.no_playlist_selected)
+end
+
+---@return spoil.Error
+function M.playlist_forbidden()
+  return M.new(M.messages.playlist_forbidden, { status = 403 })
 end
 
 ---@return spoil.Error
